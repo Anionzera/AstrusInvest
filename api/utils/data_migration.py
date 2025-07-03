@@ -36,8 +36,8 @@ def migrate_symbol_data(symbol, period="max", interval="1d", arctic_service=None
     try:
         logger.info(f"Obtendo dados históricos para {symbol}, período: {period}, intervalo: {interval}")
         
-        # Baixar dados do Yahoo Finance
-        data = yf.download(symbol, period=period, interval=interval, progress=False)
+        # Baixar dados do Yahoo Finance com auto_adjust=False para ter Adj Close
+        data = yf.download(symbol, period=period, interval=interval, progress=False, auto_adjust=False)
         
         if data.empty:
             logger.warning(f"Nenhum dado obtido para {symbol}")

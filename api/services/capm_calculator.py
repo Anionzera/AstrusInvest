@@ -219,9 +219,9 @@ class CAPMCalculator:
             else:
                 start_date = end_date - timedelta(days=730)  # Default 2 anos
             
-            # Baixar dados
-            stock_data = yf.download(symbol, start=start_date, end=end_date, progress=False, auto_adjust=True)
-            market_data = yf.download(self.market_index, start=start_date, end=end_date, progress=False, auto_adjust=True)
+            # Baixar dados com auto_adjust=False para ter Adj Close disponível
+            stock_data = yf.download(symbol, start=start_date, end=end_date, progress=False, auto_adjust=False)
+            market_data = yf.download(self.market_index, start=start_date, end=end_date, progress=False, auto_adjust=False)
             
             if stock_data.empty or market_data.empty:
                 logger.error(f"Dados vazios para {symbol} ou {self.market_index}")

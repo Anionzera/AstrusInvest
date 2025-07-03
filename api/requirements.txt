@@ -1,6 +1,6 @@
 arcticdb==5.5.1
 dtale==3.17.0            # painel interativo para DataFrames 
-empyrical-reloaded==0.5.11  # métricas de performance e risco :contentReference[oaicite:1]{index=1}
+empyrical-reloaded==0.5.12  # métricas de performance e risco :contentReference[oaicite:1]{index=1}
 finplot==1.9.7           # gráficos financeiros leves 
 flask==2.3.3             # compatível com Dash≤2.18.2 (D-Tale) :contentReference[oaicite:3]{index=3}
 flask-caching==2.3.1
@@ -12,7 +12,7 @@ pandas==2.2.3
 pandas-ta==0.3.14b0
 protobuf>=5.29.0,<6.0.0dev
 pycoingecko==3.2.0
-pyfolio-reloaded==0.9.8  # análise de portfólios :contentReference[oaicite:4]{index=4}
+pyfolio-reloaded==0.9.9  # análise de portfólios :contentReference[oaicite:4]{index=4}
 python-dateutil==2.9.0.post0
 python-dotenv==1.1.0
 pymongo==3.13.0
@@ -20,14 +20,18 @@ PyPortfolioOpt==1.5.6
 requests==2.31.0
 scikit-learn==1.6.1
 scipy==1.15.2
-tensorboard==2.19.0
-tensorflow==2.19.0
-yfinance==0.2.59
+yfinance==0.2.64
 schedule
-scipy
 fastapi
 beautifulsoup4==4.12.3
 lxml==5.1.0
 html5lib==1.1
 dataclasses==0.6  # Para Python < 3.7 (opcional)
 typing-extensions==4.12.2  # Para melhor suporte a tipos
+
+# SKFolio Dependencies - Otimização de Portfólio Avançada
+skfolio==0.10.1          # Biblioteca principal de otimização de portfólio
+cvxpy>=1.5.0             # Otimização convexa (base do SKFolio)
+clarabel>=0.9.0          # Solver de otimização principal (Rust-based)
+joblib>=1.3.2            # Processamento paralelo
+plotly>=5.22.0           # Visualizações interativas avançadas

@@ -25,6 +25,9 @@ from routes.valuation_routes import valuation_bp
 # Importar as rotas de Performance Analysis
 from routes.performance_routes import performance_bp
 
+# Importar as rotas do SKFolio
+from routes.skfolio_routes import skfolio_bp
+
 # Importar as novas rotas de Valuation V2 (comentado - arquivo não existe)
 # from routes.valuation_routes_v2 import register_valuation_v2_routes
 
@@ -46,6 +49,9 @@ app.register_blueprint(valuation_bp)
 
 # Registrar blueprint de Performance Analysis
 app.register_blueprint(performance_bp)
+
+# Registrar blueprint do SKFolio
+app.register_blueprint(skfolio_bp)
 
 # Registrar as novas rotas de Valuation V2 (comentado - arquivo não existe)
 # register_valuation_v2_routes(app)
@@ -269,13 +275,22 @@ def get_quote():
         if primary_source == 'custom' and formatted_symbol == '^IFIX':
             # Tratamento especial para IFIX que não funciona bem com ticker.info
             try:
-                # Tentar usar o ETF XFII11.SA primeiro
-                ticker = yf.Ticker('XFII11.SA')
-                history = ticker.history(period="2d")
+                # Tentar usar o ETF XFII11.SA primeiro com Adj Close
+                history = yf.download('XFII11.SA', period="2d", progress=False, auto_adjust=False)
                 
                 if not history.empty:
-                    last_close = float(history['Close'].iloc[-1]) if 'Close' in history else 0
-                    prev_close = float(history['Close'].iloc[-2]) if len(history) > 1 and 'Close' in history else last_close
+                    # Priorizar Adj Close
+                    if 'Adj Close' in history.columns:
+                        close_col = 'Adj Close'
+                        logger.info("✅ Usando Adj Close para XFII11.SA (proxy IFIX)")
+                    elif 'Close' in history.columns:
+                        close_col = 'Close'
+                        logger.warning("⚠️ Adj Close não disponível, usando Close para XFII11.SA")
+                    else:
+                        raise ValueError("❌ Nenhuma coluna de preço encontrada para XFII11.SA")
+                    
+                    last_close = float(history[close_col].iloc[-1])
+                    prev_close = float(history[close_col].iloc[-2]) if len(history) > 1 else last_close
                     change = last_close - prev_close
                     change_percent = (change / prev_close) if prev_close else 0
                     
@@ -353,16 +368,23 @@ def get_quote():
         # Tratamento especial para BRL=X (taxa de câmbio)
         elif formatted_symbol == 'BRL=X':
             try:
-                # Para BRL=X, podemos usar tanto USD/BRL quanto BRL/USD, mas precisamos inverter o valor
-                ticker = yf.Ticker(formatted_symbol)
-                history = ticker.history(period="2d")
+                # Para BRL=X, usar auto_adjust=False e priorizar Adj Close
+                history = yf.download(formatted_symbol, period="2d", progress=False, auto_adjust=False)
                 
                 if not history.empty:
+                    # Priorizar Adj Close para taxa de câmbio
+                    if 'Adj Close' in history.columns:
+                        close_col = 'Adj Close'
+                        logger.info("✅ Usando Adj Close para BRL=X")
+                    elif 'Close' in history.columns:
+                        close_col = 'Close'
+                        logger.warning("⚠️ Adj Close não disponível, usando Close para BRL=X")
+                    else:
+                        raise ValueError("❌ Nenhuma coluna de preço encontrada para BRL=X")
+                    
                     # Para BRL=X, o Yahoo retorna USD/BRL (por exemplo, 5.5 para 5.5 reais por dólar)
-                    # Não precisamos inverter o valor, estamos interessados em quanto vale o real em relação ao dólar
-                    # Ou seja, USD/BRL já é o que precisamos
-                    last_close = float(history['Close'].iloc[-1]) if 'Close' in history else 0
-                    prev_close = float(history['Close'].iloc[-2]) if len(history) > 1 and 'Close' in history else last_close
+                    last_close = float(history[close_col].iloc[-1])
+                    prev_close = float(history[close_col].iloc[-2]) if len(history) > 1 else last_close
                     change = last_close - prev_close
                     change_percent = (change / prev_close) if prev_close else 0
                     
@@ -396,13 +418,23 @@ def get_quote():
         info = ticker.info
         
         if not info:
-            # Tentar usar dados históricos como fallback
+            # Tentar usar dados históricos como fallback com Adj Close
             try:
-                history = ticker.history(period="2d")
+                history = yf.download(formatted_symbol, period="2d", progress=False, auto_adjust=False)
                 
                 if not history.empty:
-                    last_close = float(history['Close'].iloc[-1]) if 'Close' in history else 0
-                    prev_close = float(history['Close'].iloc[-2]) if len(history) > 1 and 'Close' in history else last_close
+                    # Priorizar Adj Close no fallback
+                    if 'Adj Close' in history.columns:
+                        close_col = 'Adj Close'
+                        logger.info(f"✅ Usando Adj Close para fallback de {formatted_symbol}")
+                    elif 'Close' in history.columns:
+                        close_col = 'Close'
+                        logger.warning(f"⚠️ Adj Close não disponível, usando Close para fallback de {formatted_symbol}")
+                    else:
+                        raise ValueError(f"❌ Nenhuma coluna de preço encontrada para fallback de {formatted_symbol}")
+                    
+                    last_close = float(history[close_col].iloc[-1])
+                    prev_close = float(history[close_col].iloc[-2]) if len(history) > 1 else last_close
                     change = last_close - prev_close
                     change_percent = (change / prev_close) if prev_close else 0
                     
@@ -532,11 +564,75 @@ def get_history():
                 logger.warning(f"Erro ao obter dados do ArcticDB para {formatted_symbol}: {str(arctic_error)}. Tentando Yahoo Finance.")
         
         # Caso não tenha conseguido do ArcticDB, buscar do Yahoo Finance
-        ticker_data = yf.Ticker(formatted_symbol)
-        history = ticker_data.history(period=period, interval=interval)
+        # USAR auto_adjust=False para ter Adj Close separado e priorizar ele
+        history = yf.download(formatted_symbol, period=period, interval=interval, 
+                             progress=False, auto_adjust=False)
         
         if history.empty:
             return jsonify({"error": f"Nenhum dado histórico encontrado para {formatted_symbol}"}), 404
+        
+        # Função para extrair preços com prioridade ABSOLUTA para Adj Close
+        def extract_adj_close_data(df, symbol_name):
+            """Extrai dados priorizando SEMPRE Adj Close."""
+            price_columns = {}
+            
+            # Tratar MultiIndex (múltiplos símbolos)
+            if isinstance(df.columns, pd.MultiIndex):
+                logger.info(f"Processando MultiIndex para {symbol_name}")
+                
+                # Mapear colunas do MultiIndex
+                for col in df.columns:
+                    col_name = col[0].lower().replace(' ', '_')
+                    if col_name not in price_columns:
+                        price_columns[col_name] = col
+                
+                # PRIORIDADE ABSOLUTA: Adj Close
+                if 'adj_close' in price_columns:
+                    close_data = df[price_columns['adj_close']]
+                    logger.info(f"✅ Usando Adj Close para {symbol_name}")
+                elif 'close' in price_columns:
+                    close_data = df[price_columns['close']]
+                    logger.warning(f"⚠️ Adj Close não disponível, usando Close para {symbol_name}")
+                else:
+                    raise ValueError(f"❌ Nenhuma coluna de preço encontrada para {symbol_name}")
+                
+                # Outras colunas OHLCV
+                open_data = df[price_columns['open']] if 'open' in price_columns else None
+                high_data = df[price_columns['high']] if 'high' in price_columns else None
+                low_data = df[price_columns['low']] if 'low' in price_columns else None
+                volume_data = df[price_columns['volume']] if 'volume' in price_columns else None
+                
+            else:
+                # Colunas simples - PRIORIDADE ABSOLUTA para Adj Close
+                if 'Adj Close' in df.columns:
+                    close_data = df['Adj Close']
+                    logger.info(f"✅ Usando Adj Close para {symbol_name}")
+                elif 'Close' in df.columns:
+                    close_data = df['Close']
+                    logger.warning(f"⚠️ Adj Close não disponível, usando Close para {symbol_name}")
+                else:
+                    raise ValueError(f"❌ Nenhuma coluna de preço encontrada para {symbol_name}")
+                
+                # Outras colunas OHLCV
+                open_data = df.get('Open')
+                high_data = df.get('High')
+                low_data = df.get('Low')
+                volume_data = df.get('Volume')
+            
+            return {
+                'close': close_data,
+                'open': open_data,
+                'high': high_data,
+                'low': low_data,
+                'volume': volume_data
+            }
+        
+        # Extrair dados com prioridade Adj Close
+        try:
+            price_data = extract_adj_close_data(history, formatted_symbol)
+        except ValueError as e:
+            logger.error(f"Erro ao extrair dados de preço: {e}")
+            return jsonify({"error": str(e), "symbol": formatted_symbol}), 500
         
         # Processar os dados históricos
         response = {
@@ -544,16 +640,22 @@ def get_history():
             "history": []
         }
         
-        # Coletar os dados históricos
-        for index, row in history.iterrows():
+        # Coletar os dados históricos usando SEMPRE Adj Close quando disponível
+        for index in history.index:
             entry = {
                 "date": index.strftime('%Y-%m-%d'),
-                "open": float(row['Open']) if 'Open' in row else None,
-                "high": float(row['High']) if 'High' in row else None,
-                "low": float(row['Low']) if 'Low' in row else None,
-                "close": float(row['Close']) if 'Close' in row else None,
-                "volume": int(row['Volume']) if 'Volume' in row and not pd.isna(row['Volume']) else 0
+                "close": round(float(price_data['close'].loc[index]) if pd.notna(price_data['close'].loc[index]) else 0, 4),
+                "volume": int(price_data['volume'].loc[index]) if price_data['volume'] is not None and pd.notna(price_data['volume'].loc[index]) else 0
             }
+            
+            # Adicionar OHLC se disponível
+            if price_data['open'] is not None:
+                entry["open"] = round(float(price_data['open'].loc[index]) if pd.notna(price_data['open'].loc[index]) else 0, 4)
+            if price_data['high'] is not None:
+                entry["high"] = round(float(price_data['high'].loc[index]) if pd.notna(price_data['high'].loc[index]) else 0, 4)
+            if price_data['low'] is not None:
+                entry["low"] = round(float(price_data['low'].loc[index]) if pd.notna(price_data['low'].loc[index]) else 0, 4)
+            
             response["history"].append(entry)
         
         # Adicionar informação sobre a fonte dos dados
@@ -611,10 +713,11 @@ def get_technical_analysis():
         formatted_symbol = format_symbol(symbol)
         logger.info(f"Calculando análise técnica para o símbolo: {formatted_symbol} (original: {symbol})")
         
-        # Obter histórico de preços para calcular indicadores
+        # Obter histórico de preços para calcular indicadores usando SEMPRE Adj Close
         try:
-            ticker = yf.Ticker(formatted_symbol)
-            history = ticker.history(period=period, interval=interval)
+            # USAR auto_adjust=False para ter Adj Close separado
+            history = yf.download(formatted_symbol, period=period, interval=interval, 
+                                 progress=False, auto_adjust=False)
             
             if history.empty:
                 return jsonify({"error": f"Não foi possível obter histórico para '{symbol}'"}), 404
@@ -623,14 +726,63 @@ def get_technical_analysis():
             import pandas as pd
             import pandas_ta as ta
             
-            # Renomear colunas para adequar ao pandas-ta
-            df = history.rename(columns={
-                'Open': 'open',
-                'High': 'high',
-                'Low': 'low',
-                'Close': 'close',
-                'Volume': 'volume'
-            })
+            # Função para extrair preços com prioridade ABSOLUTA para Adj Close
+            def extract_ta_data(df, symbol_name):
+                """Extrai dados para análise técnica priorizando SEMPRE Adj Close."""
+                ta_data = {}
+                
+                # Tratar MultiIndex (múltiplos símbolos)
+                if isinstance(df.columns, pd.MultiIndex):
+                    logger.info(f"Processando MultiIndex para análise técnica de {symbol_name}")
+                    
+                    # Mapear colunas do MultiIndex
+                    col_mapping = {}
+                    for col in df.columns:
+                        col_name = col[0].lower().replace(' ', '_')
+                        if col_name not in col_mapping:
+                            col_mapping[col_name] = col
+                    
+                    # PRIORIDADE ABSOLUTA: Adj Close para Close
+                    if 'adj_close' in col_mapping:
+                        ta_data['close'] = df[col_mapping['adj_close']]
+                        logger.info(f"✅ Usando Adj Close para análise técnica de {symbol_name}")
+                    elif 'close' in col_mapping:
+                        ta_data['close'] = df[col_mapping['close']]
+                        logger.warning(f"⚠️ Adj Close não disponível, usando Close para análise técnica de {symbol_name}")
+                    else:
+                        raise ValueError(f"❌ Nenhuma coluna de preço encontrada para análise técnica de {symbol_name}")
+                    
+                    # Outras colunas para análise técnica
+                    ta_data['open'] = df[col_mapping['open']] if 'open' in col_mapping else ta_data['close']
+                    ta_data['high'] = df[col_mapping['high']] if 'high' in col_mapping else ta_data['close']
+                    ta_data['low'] = df[col_mapping['low']] if 'low' in col_mapping else ta_data['close']
+                    ta_data['volume'] = df[col_mapping['volume']] if 'volume' in col_mapping else pd.Series([0] * len(df), index=df.index)
+                    
+                else:
+                    # Colunas simples - PRIORIDADE ABSOLUTA para Adj Close
+                    if 'Adj Close' in df.columns:
+                        ta_data['close'] = df['Adj Close']
+                        logger.info(f"✅ Usando Adj Close para análise técnica de {symbol_name}")
+                    elif 'Close' in df.columns:
+                        ta_data['close'] = df['Close']
+                        logger.warning(f"⚠️ Adj Close não disponível, usando Close para análise técnica de {symbol_name}")
+                    else:
+                        raise ValueError(f"❌ Nenhuma coluna de preço encontrada para análise técnica de {symbol_name}")
+                    
+                    # Outras colunas para análise técnica (fallback para close se não disponível)
+                    ta_data['open'] = df.get('Open', ta_data['close'])
+                    ta_data['high'] = df.get('High', ta_data['close'])
+                    ta_data['low'] = df.get('Low', ta_data['close'])
+                    ta_data['volume'] = df.get('Volume', pd.Series([0] * len(df), index=df.index))
+                
+                return pd.DataFrame(ta_data, index=df.index)
+            
+            # Extrair dados com prioridade Adj Close para análise técnica
+            try:
+                df = extract_ta_data(history, formatted_symbol)
+            except ValueError as e:
+                logger.error(f"Erro ao extrair dados para análise técnica: {e}")
+                return jsonify({"error": str(e), "symbol": formatted_symbol}), 500
             
             # Inicializar objeto para resultado
             result = {
@@ -875,14 +1027,20 @@ def get_market_indices():
         for idx in indices:
             try:
                 # Não precisamos formatar aqui pois já estão no formato correto
-                ticker = yf.Ticker(idx)
-                
-                # Tentar obter informações básicas sem depender de ticker.info
-                hist = ticker.history(period="1d")
+                # Usar yf.download com auto_adjust=False para ter Adj Close
+                hist = yf.download(idx, period="1d", progress=False, auto_adjust=False)
                 
                 if not hist.empty:
-                    # Obter o último preço da série histórica
-                    last_price = float(hist['Close'].iloc[-1]) if 'Close' in hist else None
+                    # Priorizar Adj Close para índices
+                    if 'Adj Close' in hist.columns:
+                        last_price = float(hist['Adj Close'].iloc[-1])
+                        logger.info(f"✅ Usando Adj Close para índice {idx}")
+                    elif 'Close' in hist.columns:
+                        last_price = float(hist['Close'].iloc[-1])
+                        logger.warning(f"⚠️ Adj Close não disponível, usando Close para índice {idx}")
+                    else:
+                        last_price = None
+                        logger.error(f"❌ Nenhuma coluna de preço encontrada para índice {idx}")
                     
                     # Para BRL=X, não precisamos mais inverter o valor
                     # Mantemos o valor original (USD/BRL)

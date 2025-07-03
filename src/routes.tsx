@@ -31,8 +31,11 @@ const MarketAnalysisPage = lazy(() => import('./components/market/MarketAnalysis
 // Importar o componente de valuation
 const ValuationPage = lazy(() => import('./components/valuation/ValuationPage').catch(() => ({ default: () => <div>Erro ao carregar página de valuation</div> })));
 
-// Importar a nova página de análise de performance
-const PerformanceAnalysisPage = lazy(() => import('./components/analysis/PerformanceAnalysisPage').catch(() => ({ default: () => <div>Erro ao carregar página de análise de performance</div> })));
+// Importar a nova página de análise de performance moderna
+const PerformancePage = lazy(() => import('./pages/PerformancePage').catch(() => ({ default: () => <div>Erro ao carregar página de análise de performance</div> })));
+
+// Importar a página de Otimização Avançada com IA
+const AdvancedOptimizationPage = lazy(() => import('./pages/SKFolioPage').catch(() => ({ default: () => <div>Erro ao carregar página de Otimização IA</div> })));
 
 // Configuração de rotas
 export const appRoutes: RouteObject[] = [
@@ -171,7 +174,16 @@ export const appRoutes: RouteObject[] = [
         path: 'performance',
         element: (
           <Suspense fallback={<PageLoading />}>
-            <PerformanceAnalysisPage />
+            <PerformancePage />
+          </Suspense>
+        ),
+      },
+      // Nova rota para Otimização Avançada com IA
+      {
+        path: 'optimization',
+        element: (
+          <Suspense fallback={<PageLoading />}>
+            <AdvancedOptimizationPage />
           </Suspense>
         ),
       },

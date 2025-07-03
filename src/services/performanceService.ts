@@ -1,7 +1,7 @@
 // Configuração da API base URL
 const API_BASE_URL = 'http://localhost:5000';
 
-// Interfaces
+// Interfaces melhoradas
 export interface PortfolioAsset {
   ticker: string;
   weight: number;
@@ -9,42 +9,144 @@ export interface PortfolioAsset {
   sector?: string;
 }
 
+export interface AnalysisPeriod {
+  start_date: string;
+  end_date: string;
+  total_days: number;
+  period: string;
+}
+
+export interface PortfolioComposition {
+  ticker: string;
+  weight: number;
+  name: string;
+}
+
 export interface PerformanceMetrics {
+  // ===== MÉTRICAS BÁSICAS DE RETORNO =====
   annual_return: number;
+  cagr: number;
   cumulative_return: number;
+  simple_returns_mean: number;
+  
+  // ===== MÉTRICAS DE VOLATILIDADE E RISCO =====
   annual_volatility: number;
+  downside_risk: number;
+  value_at_risk_95: number;
+  value_at_risk_99: number;
+  conditional_value_at_risk_95: number;
+  conditional_value_at_risk_99: number;
+  max_drawdown: number;
+  
+  // ===== MÉTRICAS DE RISCO-RETORNO =====
   sharpe_ratio: number;
   sortino_ratio: number;
   calmar_ratio: number;
   omega_ratio: number;
-  max_drawdown: number;
-  avg_drawdown: number;
-  avg_drawdown_days: number;
-  max_drawdown_days: number;
+  
+  // ===== MÉTRICAS ESTATÍSTICAS =====
   skewness: number;
   kurtosis: number;
   tail_ratio: number;
-  common_sense_ratio: number;
-  downside_risk: number;
-  value_at_risk: number;
-  conditional_value_at_risk: number;
   stability_of_timeseries: number;
-  periods: number;
-  start_date: string;
-  end_date: string;
-  // Métricas vs benchmark (opcionais)
-  alpha?: number;
-  beta?: number;
-  tracking_error?: number;
-  information_ratio?: number;
-  up_capture?: number;
-  down_capture?: number;
-  capture_ratio?: number;
-  benchmark_annual_return?: number;
-  benchmark_volatility?: number;
-  benchmark_sharpe?: number;
-  benchmark_max_drawdown?: number;
-  excess_sharpe?: number;
+  
+  // ===== MÉTRICAS AVANÇADAS DE RISCO =====
+  gpd_var_estimate?: number | null;
+  gpd_es_estimate?: number | null;
+  
+  // ===== MÉTRICAS VS BENCHMARK =====
+  alpha?: number | null;
+  beta?: number | null;
+  up_capture?: number | null;
+  down_capture?: number | null;
+  capture_ratio?: number | null;
+  excess_sharpe?: number | null;
+  batting_average?: number | null;
+  beta_fragility_heuristic?: number | null;
+  tracking_error?: number | null;
+  information_ratio?: number | null;
+  
+  // ===== ALPHA/BETA UP/DOWN =====
+  up_alpha?: number | null;
+  up_beta?: number | null;
+  down_alpha?: number | null;
+  down_beta?: number | null;
+  
+  // ===== BENCHMARK STATS =====
+  benchmark_annual_return?: number | null;
+  benchmark_volatility?: number | null;
+  benchmark_sharpe?: number | null;
+  benchmark_max_drawdown?: number | null;
+  
+  // ===== MÉTRICAS ROLLING (30 dias) =====
+  roll_annual_volatility_30d?: number | null;
+  roll_max_drawdown_30d?: number | null;
+  roll_sharpe_ratio_30d?: number | null;
+  roll_sortino_ratio_30d?: number | null;
+  roll_alpha_30d?: number | null;
+  roll_beta_30d?: number | null;
+  roll_up_capture_30d?: number | null;
+  roll_down_capture_30d?: number | null;
+  
+  // ===== MÉTRICAS DE AGREGAÇÃO =====
+  monthly_returns_count?: number | null;
+  yearly_returns_count?: number | null;
+  best_month?: number | null;
+  worst_month?: number | null;
+  best_year?: number | null;
+  worst_year?: number | null;
+  positive_months_pct?: number | null;
+  positive_years_pct?: number | null;
+  
+  // ===== ANÁLISES AVANÇADAS =====
+  performance_attribution?: any;
+  factor_exposures?: any;
+}
+
+export interface PerformanceCharts {
+  // Gráficos Customizados
+  cumulative_returns: string;
+  drawdown: string;
+  returns_distribution: string;
+  portfolio_composition: string;
+  price_evolution: string;
+  rolling_sharpe: string;
+  
+  // Gráficos Pyfolio Nativos
+  rolling_returns_pyfolio?: string;
+  rolling_sharpe_pyfolio?: string;
+  rolling_beta_pyfolio?: string;
+  rolling_volatility_pyfolio?: string;
+  drawdown_underwater_pyfolio?: string;
+  monthly_heatmap_pyfolio?: string;
+  annual_returns_pyfolio?: string;
+  monthly_distribution_pyfolio?: string;
+  return_quantiles_pyfolio?: string;
+  
+  // Gráficos Customizados Adicionais
+  returns_distribution_advanced?: string;
+  drawdown_periods_custom?: string;
+  custom_cumulative_returns?: string;
+  
+  error?: string;
+}
+
+export interface ModernAnalysisRequest {
+  tickers: string[];
+  weights: number[];
+  period: string;
+  benchmark: string;
+  risk_free_rate: number;
+}
+
+export interface ModernAnalysisResponse {
+  success: boolean;
+  timestamp: string;
+  analysis_period: AnalysisPeriod;
+  portfolio_composition: PortfolioComposition[];
+  performance_metrics: PerformanceMetrics;
+  charts: PerformanceCharts;
+  request_params: ModernAnalysisRequest;
 }
 
 export interface RollingMetric {
@@ -168,6 +270,47 @@ class PerformanceService {
   }
 
   /**
+   * Nova análise moderna completa com gráficos matplotlib
+   */
+  async comprehensiveAnalysis(request: ModernAnalysisRequest): Promise<ModernAnalysisResponse> {
+    try {
+      // Validações básicas
+      if (request.tickers.length !== request.weights.length) {
+        throw new Error('Número de tickers deve ser igual ao número de pesos');
+      }
+
+      const weightSum = request.weights.reduce((sum, weight) => sum + weight, 0);
+      if (Math.abs(weightSum - 1.0) > 0.01) {
+        throw new Error('Soma dos pesos deve ser aproximadamente 1.0');
+      }
+
+      const response = await fetch(`${this.baseUrl}/comprehensive-analysis`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(request),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      
+      if (!data.success) {
+        throw new Error(data.error || 'Análise falhou');
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Erro na análise moderna:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Verifica a saúde do serviço de performance
    */
   async healthCheck(): Promise<HealthCheckResponse> {
@@ -191,7 +334,7 @@ class PerformanceService {
   }
 
   /**
-   * Executa análise completa de performance do portfólio
+   * Executa análise completa de performance do portfólio (método legado)
    */
   async analyzePortfolio(request: AnalysisRequest): Promise<AnalysisResponse> {
     try {
@@ -200,8 +343,8 @@ class PerformanceService {
         throw new Error('Número de tickers deve ser igual ao número de pesos');
       }
 
-      const totalWeight = request.weights.reduce((sum, weight) => sum + weight, 0);
-      if (Math.abs(totalWeight - 1) > 0.01) {
+      const weightSum = request.weights.reduce((sum, weight) => sum + weight, 0);
+      if (Math.abs(weightSum - 1.0) > 0.01) {
         throw new Error('Soma dos pesos deve ser aproximadamente 1.0');
       }
 
@@ -214,17 +357,17 @@ class PerformanceService {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
+        const errorData = await response.json();
         throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
       }
 
-      const result = await response.json();
+      const data = await response.json();
       
-      if (!result.success) {
-        throw new Error(result.error || 'Análise falhou');
+      if (!data.success) {
+        throw new Error(data.error || 'Análise falhou');
       }
 
-      return result;
+      return data;
     } catch (error) {
       console.error('Erro na análise de portfólio:', error);
       throw error;
@@ -238,36 +381,26 @@ class PerformanceService {
     strategies: StrategyComparison,
     periodMonths: number = 12,
     benchmark: string = '^BVSP',
-    riskFreeRate: number = 0.0525
+    riskFreeRate: number = 0.1475
   ): Promise<ComparisonResponse> {
     try {
       // Validações
       if (Object.keys(strategies).length < 2) {
         throw new Error('Necessário pelo menos 2 estratégias para comparação');
       }
-
-      // Validar e normalizar pesos de cada estratégia
-      const normalizedStrategies: StrategyComparison = {};
       
       for (const [strategyName, weights] of Object.entries(strategies)) {
-        const totalWeight = Object.values(weights).reduce((sum, weight) => sum + weight, 0);
-        
-        if (totalWeight === 0) {
-          throw new Error(`Estratégia '${strategyName}' não pode ter peso total zero`);
-        }
-
-        // Normalizar pesos
-        normalizedStrategies[strategyName] = {};
-        for (const [ticker, weight] of Object.entries(weights)) {
-          normalizedStrategies[strategyName][ticker] = weight / totalWeight;
+        const weightSum = Object.values(weights).reduce((sum, weight) => sum + weight, 0);
+        if (Math.abs(weightSum - 1.0) > 0.01) {
+          throw new Error(`Soma dos pesos da estratégia '${strategyName}' deve ser aproximadamente 1.0`);
         }
       }
 
-      const requestPayload = {
-        strategies: normalizedStrategies,
+      const requestBody = {
+        strategies,
         period_months: periodMonths,
         benchmark,
-        risk_free_rate: riskFreeRate,
+        risk_free_rate: riskFreeRate
       };
 
       const response = await fetch(`${this.baseUrl}/compare-strategies`, {
@@ -275,21 +408,21 @@ class PerformanceService {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(requestPayload),
+        body: JSON.stringify(requestBody),
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
+        const errorData = await response.json();
         throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
       }
 
-      const result = await response.json();
+      const data = await response.json();
       
-      if (!result.success) {
-        throw new Error(result.error || 'Comparação falhou');
+      if (!data.success) {
+        throw new Error(data.error || 'Comparação falhou');
       }
 
-      return result;
+      return data;
     } catch (error) {
       console.error('Erro na comparação de estratégias:', error);
       throw error;
@@ -297,7 +430,7 @@ class PerformanceService {
   }
 
   /**
-   * Calcula métricas avançadas para retornos personalizados
+   * Calcula métricas avançadas usando empyrical
    */
   async calculateAdvancedMetrics(request: MetricsRequest): Promise<{
     success: boolean;
@@ -313,12 +446,8 @@ class PerformanceService {
     };
   }> {
     try {
-      if (request.returns.length === 0) {
-        throw new Error('Lista de retornos não pode estar vazia');
-      }
-
-      if (request.benchmark_returns && request.benchmark_returns.length !== request.returns.length) {
-        throw new Error('Retornos do benchmark devem ter o mesmo tamanho dos retornos do portfólio');
+      if (!request.returns || request.returns.length === 0) {
+        throw new Error('Lista de retornos é obrigatória');
       }
 
       const response = await fetch(`${this.baseUrl}/metrics`, {
@@ -330,25 +459,25 @@ class PerformanceService {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
+        const errorData = await response.json();
         throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
       }
 
-      const result = await response.json();
+      const data = await response.json();
       
-      if (!result.success) {
-        throw new Error(result.error || 'Cálculo de métricas falhou');
+      if (!data.success) {
+        throw new Error(data.error || 'Cálculo de métricas falhou');
       }
 
-      return result;
+      return data;
     } catch (error) {
-      console.error('Erro no cálculo de métricas avançadas:', error);
+      console.error('Erro no cálculo de métricas:', error);
       throw error;
     }
   }
 
   /**
-   * Gera tearsheet visual usando pyfolio
+   * Gera tearsheet visual
    */
   async generateTearsheet(request: TearsheetRequest): Promise<{
     success: boolean;
@@ -358,12 +487,8 @@ class PerformanceService {
     };
   }> {
     try {
-      if (request.returns.length === 0) {
-        throw new Error('Lista de retornos não pode estar vazia');
-      }
-
-      if (request.benchmark_returns && request.benchmark_returns.length !== request.returns.length) {
-        throw new Error('Retornos do benchmark devem ter o mesmo tamanho dos retornos do portfólio');
+      if (!request.returns || request.returns.length === 0) {
+        throw new Error('Lista de retornos é obrigatória');
       }
 
       const response = await fetch(`${this.baseUrl}/tearsheet`, {
@@ -375,17 +500,17 @@ class PerformanceService {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
+        const errorData = await response.json();
         throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
       }
 
-      const result = await response.json();
+      const data = await response.json();
       
-      if (!result.success) {
-        throw new Error(result.error || 'Geração de tearsheet falhou');
+      if (!data.success) {
+        throw new Error(data.error || 'Geração de tearsheet falhou');
       }
 
-      return result;
+      return data;
     } catch (error) {
       console.error('Erro na geração de tearsheet:', error);
       throw error;
@@ -393,7 +518,7 @@ class PerformanceService {
   }
 
   /**
-   * Calcula métricas rolling para análise temporal
+   * Calcula métricas rolling
    */
   async calculateRollingMetrics(request: RollingMetricsRequest): Promise<{
     success: boolean;
@@ -406,16 +531,12 @@ class PerformanceService {
     };
   }> {
     try {
-      if (request.returns.length === 0) {
-        throw new Error('Lista de retornos não pode estar vazia');
+      if (!request.returns || request.returns.length === 0) {
+        throw new Error('Lista de retornos é obrigatória');
       }
 
-      if (request.window >= request.returns.length) {
-        throw new Error('Janela deve ser menor que o número total de retornos');
-      }
-
-      if (request.window < 10) {
-        throw new Error('Janela deve ser de pelo menos 10 períodos');
+      if (request.window <= 0) {
+        throw new Error('Janela de rolling deve ser maior que 0');
       }
 
       const response = await fetch(`${this.baseUrl}/rolling-metrics`, {
@@ -427,108 +548,87 @@ class PerformanceService {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
+        const errorData = await response.json();
         throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
       }
 
-      const result = await response.json();
+      const data = await response.json();
       
-      if (!result.success) {
-        throw new Error(result.error || 'Cálculo de métricas rolling falhou');
+      if (!data.success) {
+        throw new Error(data.error || 'Cálculo de métricas rolling falhou');
       }
 
-      return result;
+      return data;
     } catch (error) {
       console.error('Erro no cálculo de métricas rolling:', error);
       throw error;
     }
   }
 
-  /**
-   * Utilitário para formatar valores percentuais
-   */
+  // Métodos de formatação e utilitários
   formatPercentage(value: number, decimals: number = 2): string {
     return `${(value * 100).toFixed(decimals)}%`;
   }
 
-  /**
-   * Utilitário para formatar números
-   */
   formatNumber(value: number, decimals: number = 3): string {
     return value.toFixed(decimals);
   }
 
-  /**
-   * Utilitário para formatar datas
-   */
   formatDate(dateString: string): string {
     return new Date(dateString).toLocaleDateString('pt-BR');
   }
 
-  /**
-   * Utilitário para obter cor baseada no valor da métrica
-   */
   getMetricColor(value: number, type: 'return' | 'risk' = 'return'): string {
     if (type === 'return') {
-      return value > 0 ? '#10b981' : '#ef4444'; // verde para positivo, vermelho para negativo
+      return value > 0 ? 'text-green-600' : value < 0 ? 'text-red-600' : 'text-gray-600';
+    } else {
+      return value < 0.1 ? 'text-green-600' : value < 0.2 ? 'text-yellow-600' : 'text-red-600';
     }
-    
-    // Para métricas de risco, cores baseadas em limites
-    if (value < 0.15) return '#10b981'; // baixo risco - verde
-    if (value < 0.25) return '#f59e0b'; // risco médio - amarelo
-    return '#ef4444'; // alto risco - vermelho
   }
 
-  /**
-   * Utilitário para determinar o benchmark recomendado baseado nos ativos
-   */
   getRecommendedBenchmark(tickers: string[]): string {
-    const hasBrazilianAssets = tickers.some(ticker => ticker.endsWith('.SA'));
-    const hasUSAssets = tickers.some(ticker => !ticker.endsWith('.SA') && !ticker.startsWith('^'));
+    const hasInternational = tickers.some(ticker => 
+      !ticker.includes('.SA') && !ticker.startsWith('^')
+    );
+    const hasBrazilian = tickers.some(ticker => ticker.includes('.SA'));
     
-    if (hasBrazilianAssets && !hasUSAssets) {
-      return '^BVSP'; // Ibovespa para ativos brasileiros
+    if (hasInternational && !hasBrazilian) {
+      return '^GSPC'; // S&P 500
+    } else if (hasBrazilian) {
+      return '^BVSP'; // Ibovespa
+    } else {
+      return '^BVSP'; // Default
     }
-    
-    if (hasUSAssets && !hasBrazilianAssets) {
-      return '^GSPC'; // S&P 500 para ativos americanos
-    }
-    
-    return 'EEM'; // Emerging Markets para portfolios mistos
   }
 
-  /**
-   * Valida composição do portfólio
-   */
   validatePortfolio(portfolio: PortfolioAsset[]): { isValid: boolean; errors: string[] } {
     const errors: string[] = [];
     
     if (portfolio.length === 0) {
-      errors.push('Portfólio deve conter pelo menos um ativo');
+      errors.push('Portfólio não pode estar vazio');
     }
     
     const totalWeight = portfolio.reduce((sum, asset) => sum + asset.weight, 0);
-    if (Math.abs(totalWeight - 1) > 0.01) {
-      errors.push(`Soma dos pesos deve ser próxima a 100% (atual: ${(totalWeight * 100).toFixed(2)}%)`);
+    if (Math.abs(totalWeight - 1.0) > 0.01) {
+      errors.push('Soma dos pesos deve ser aproximadamente 100%');
     }
     
-    const duplicatedTickers = portfolio
+    const duplicateTickers = portfolio
       .map(asset => asset.ticker)
-      .filter((ticker, index, array) => array.indexOf(ticker) !== index);
+      .filter((ticker, index, arr) => arr.indexOf(ticker) !== index);
     
-    if (duplicatedTickers.length > 0) {
-      errors.push(`Tickers duplicados encontrados: ${duplicatedTickers.join(', ')}`);
+    if (duplicateTickers.length > 0) {
+      errors.push(`Tickers duplicados: ${duplicateTickers.join(', ')}`);
     }
     
-    const emptyTickers = portfolio.filter(asset => !asset.ticker.trim());
-    if (emptyTickers.length > 0) {
-      errors.push(`${emptyTickers.length} ativo(s) sem ticker definido`);
+    portfolio.forEach((asset, index) => {
+      if (!asset.ticker || asset.ticker.trim() === '') {
+        errors.push(`Ativo ${index + 1}: ticker é obrigatório`);
     }
-    
-    const negativeWeights = portfolio.filter(asset => asset.weight < 0);
-    if (negativeWeights.length > 0) {
-      errors.push(`${negativeWeights.length} ativo(s) com peso negativo`);
+      if (asset.weight < 0 || asset.weight > 1) {
+        errors.push(`Ativo ${index + 1}: peso deve estar entre 0% e 100%`);
     }
+    });
     
     return {
       isValid: errors.length === 0,
@@ -540,5 +640,20 @@ class PerformanceService {
 // Instância singleton do serviço
 export const performanceService = new PerformanceService();
 
-// Export padrão
-export default performanceService; 
+// Exportar métodos principais para uso direto
+export const comprehensiveAnalysis = (request: ModernAnalysisRequest) => 
+  performanceService.comprehensiveAnalysis(request);
+
+export const analyzePortfolio = (request: AnalysisRequest) => 
+  performanceService.analyzePortfolio(request);
+
+export const compareStrategies = (
+  strategies: StrategyComparison, 
+  periodMonths?: number, 
+  benchmark?: string, 
+  riskFreeRate?: number
+) => 
+  performanceService.compareStrategies(strategies, periodMonths, benchmark, riskFreeRate);
+
+export const checkPerformanceHealth = () => 
+  performanceService.healthCheck(); 

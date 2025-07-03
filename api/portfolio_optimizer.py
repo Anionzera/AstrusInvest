@@ -139,14 +139,15 @@ class PortfolioOptimizer:
                 
                 # Baixar dados com tratamento de erros mais robusto
                 try:
-                    # Tentar baixar todos os tickers de uma vez
-                    data = yf.download(formatted_tickers, period=periodo)
+                    # Tentar baixar todos os tickers de uma vez com auto_adjust=False para ter Adj Close
+                    data = yf.download(formatted_tickers, period=periodo, auto_adjust=False)
                     
                     # Se dados válidos foram encontrados
                     if not data.empty:
-                        # Se 'Adj Close' estiver presente, use-o; caso contrário, use 'Close'
+                        # Priorizar 'Adj Close' sobre 'Close'
                         if 'Adj Close' in data.columns:
                             self.prices = data['Adj Close']
+                            logger.info("Usando 'Adj Close' para dados de preços")
                         elif 'Close' in data.columns:
                             logger.warning("Coluna 'Adj Close' não encontrada, usando 'Close' como alternativa")
                             self.prices = data['Close']
@@ -209,18 +210,20 @@ class PortfolioOptimizer:
         
         for ticker in formatted_tickers:
             try:
-                # Tentar baixar dados para este ticker
-                data = yf.download(ticker, period=periodo)
+                # Tentar baixar dados para este ticker com auto_adjust=False
+                data = yf.download(ticker, period=periodo, auto_adjust=False)
                 
                 if data.empty:
                     logger.warning(f"Sem dados para {ticker}")
                     continue
                 
-                # Se 'Adj Close' estiver presente, use-o; caso contrário, use 'Close'
+                # Priorizar 'Adj Close' sobre 'Close'
                 if 'Adj Close' in data.columns:
                     prices = data['Adj Close']
+                    logger.info(f"Usando 'Adj Close' para {ticker}")
                 elif 'Close' in data.columns:
                     prices = data['Close']
+                    logger.warning(f"Usando 'Close' para {ticker} (Adj Close não disponível)")
                 else:
                     # Se não tem Adj Close nem Close, pular
                     logger.warning(f"Sem dados de preço para {ticker}")
@@ -416,7 +419,19 @@ class PortfolioOptimizer:
                 benchmark = self.benchmark
                 
             try:
-                market_prices = yf.download(benchmark, period="2y")["Adj Close"]
+                # USAR auto_adjust=False para ter Adj Close separado e sempre priorizar ele
+                market_data = yf.download(benchmark, period="2y", progress=False, auto_adjust=False)
+                
+                # Priorizar Adj Close para benchmark do CAPM
+                if 'Adj Close' in market_data.columns:
+                    market_prices = market_data['Adj Close']
+                    logger.info(f"✅ Usando Adj Close para benchmark CAPM {benchmark}")
+                elif 'Close' in market_data.columns:
+                    market_prices = market_data['Close']
+                    logger.warning(f"⚠️ Adj Close não disponível, usando Close para benchmark CAPM {benchmark}")
+                else:
+                    raise ValueError(f"❌ Nenhuma coluna de preço encontrada para benchmark CAPM {benchmark}")
+                
                 return capm_return(self.prices, market_prices, frequency=252)
             except Exception as e:
                 logger.error(f"Erro ao obter dados do benchmark para CAPM: {str(e)}")
@@ -1172,7 +1187,7 @@ class PortfolioOptimizer:
     
     def _get_benchmark_returns(self, benchmark_ticker: str, months: int) -> pd.Series:
         """
-        Obtém retornos do benchmark para o período especificado
+        Obtém retornos do benchmark para o período especificado usando SEMPRE Adj Close
         """
         try:
             import yfinance as yf
@@ -1182,22 +1197,71 @@ class PortfolioOptimizer:
             end_date = datetime.now()
             start_date = end_date - timedelta(days=months * 30)
             
-            # Baixar dados do benchmark
-            ticker = yf.Ticker(benchmark_ticker)
-            data = ticker.history(start=start_date, end=end_date, interval="1d")
+            # Baixar dados do benchmark usando auto_adjust=False para ter Adj Close separado
+            data = yf.download(benchmark_ticker, start=start_date, end=end_date, 
+                             interval="1d", progress=False, auto_adjust=False)
             
             if data.empty:
                 logger.warning(f"Sem dados para benchmark {benchmark_ticker}")
                 return pd.Series(dtype=float)
             
+            # Função para extrair preços com prioridade ABSOLUTA para Adj Close
+            def extract_benchmark_close(df, ticker_name):
+                """Extrai dados de fechamento priorizando SEMPRE Adj Close."""
+                
+                # Tratar MultiIndex (múltiplos símbolos)
+                if isinstance(df.columns, pd.MultiIndex):
+                    logger.info(f"Processando MultiIndex para benchmark {ticker_name}")
+                    
+                    # Procurar colunas específicas
+                    adj_close_col = None
+                    close_col = None
+                    
+                    for col in df.columns:
+                        if col[0] == 'Adj Close':
+                            adj_close_col = col
+                        elif col[0] == 'Close':
+                            close_col = col
+                    
+                    # PRIORIDADE ABSOLUTA: Adj Close
+                    if adj_close_col is not None:
+                        close_data = df[adj_close_col]
+                        logger.info(f"✅ Usando Adj Close para benchmark {ticker_name}")
+                    elif close_col is not None:
+                        close_data = df[close_col]
+                        logger.warning(f"⚠️ Adj Close não disponível, usando Close para benchmark {ticker_name}")
+                    else:
+                        raise ValueError(f"❌ Nenhuma coluna de preço encontrada para benchmark {ticker_name}")
+                
+                else:
+                    # Colunas simples - PRIORIDADE ABSOLUTA para Adj Close
+                    if 'Adj Close' in df.columns:
+                        close_data = df['Adj Close']
+                        logger.info(f"✅ Usando Adj Close para benchmark {ticker_name}")
+                    elif 'Close' in df.columns:
+                        close_data = df['Close']
+                        logger.warning(f"⚠️ Adj Close não disponível, usando Close para benchmark {ticker_name}")
+                    else:
+                        raise ValueError(f"❌ Nenhuma coluna de preço encontrada para benchmark {ticker_name}")
+                
+                return close_data
+            
+            # Extrair dados de fechamento com prioridade Adj Close
+            try:
+                close_prices = extract_benchmark_close(data, benchmark_ticker)
+            except ValueError as e:
+                logger.error(f"Erro ao extrair dados de benchmark: {e}")
+                return pd.Series(dtype=float)
+            
             # Calcular retornos diários
-            benchmark_returns = data['Close'].pct_change().dropna()
+            benchmark_returns = close_prices.pct_change().dropna()
             benchmark_returns.name = f"{benchmark_ticker}_returns"
             
             # Remover timezone para compatibilidade
             if benchmark_returns.index.tz is not None:
                 benchmark_returns.index = benchmark_returns.index.tz_localize(None)
             
+            logger.info(f"✅ Benchmark {benchmark_ticker} carregado com {len(benchmark_returns)} retornos")
             return benchmark_returns
             
         except Exception as e:

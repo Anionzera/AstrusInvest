@@ -7,6 +7,7 @@ import {
   Settings,
   Menu,
   BarChart3,
+  Brain,
 } from "lucide-react";
 import { Button } from "../ui/button";
 import {
@@ -30,6 +31,7 @@ const Sidebar = ({ collapsed = false, onToggle = () => {} }: SidebarProps) => {
       label: "Nova Recomendação",
       path: "/recommendation/new",
     },
+    { icon: Brain, label: "Otimização IA", path: "/optimization" },
     { icon: History, label: "Histórico", path: "/history" },
     { icon: Settings, label: "Configurações", path: "/settings" },
     { icon: BarChart3, label: "Estatísticas", path: "/analysis" },

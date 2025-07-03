@@ -500,3 +500,13 @@ class ArcticDBService:
             logger.error(f"Erro ao verificar se {symbol} precisa atualizar: {str(e)}")
             # Em caso de erro, é mais seguro tentar atualizar
             return True 
+
+# Instância global do serviço
+_arctic_service_instance = None
+
+def get_arctic_service():
+    """Retorna instância global do serviço ArcticDB"""
+    global _arctic_service_instance
+    if _arctic_service_instance is None:
+        _arctic_service_instance = ArcticDBService()
+    return _arctic_service_instance 

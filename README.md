@@ -26,7 +26,7 @@ Uma plataforma completa e profissional para análise quantitativa de investiment
 
 ### 🔧 **Otimização de Portfólios**
 - **8 algoritmos** de otimização (Markowitz, Black-Litterman, HRP, CLA)
-- **Machine Learning** para predição de retornos (LSTM)
+- **Machine Learning** para predição de retornos (modelos estatísticos)
 - **Restrições por categoria** de ativos
 - **Fronteira eficiente** interativa
 - **Alocação discreta** (número inteiro de ações)
@@ -39,7 +39,7 @@ Uma plataforma completa e profissional para análise quantitativa de investiment
 - **Dados macroeconômicos** brasileiros
 
 ### 🤖 **Machine Learning**
-- **Redes LSTM** para predição de retornos
+- **Modelos estatísticos** para predição de retornos (Ridge, Random Forest)
 - **Análise de sentimento** (planejado)
 - **Detecção de anomalias** em dados
 - **Validação cruzada** temporal
@@ -73,11 +73,9 @@ src/
 #### **Backend**
 - **Flask 2.3.3** - Framework web principal
 - **ArcticDB 5.5.1** - Banco de dados de séries temporais
-- **TensorFlow 2.19.0** - Machine Learning
-- **PyPortfolioOpt 1.5.6** - Otimização de portfólios
+- **Scikit-learn 1.6.1** - Machine Learning
 - **pandas-ta 0.3.14b0** - Análise técnica
-- **pyfolio-reloaded 0.9.8** - Análise de performance
-- **yfinance 0.2.59** - Dados financeiros
+- **yfinance 0.2.64** - Dados financeiros
 - **BeautifulSoup 4.12.3** - Web scraping
 
 #### **Frontend**
@@ -97,13 +95,7 @@ src/
 - MongoDB (opcional, para ArcticDB)
 - Git
 
-### **1. Clone o Repositório**
-```bash
-git clone https://github.com/seu-usuario/astrus-valuation.git
-cd astrus-valuation
-```
-
-### **2. Configuração do Backend**
+### **1. Configuração do Backend**
 
 #### **Windows**
 ```bash
@@ -121,14 +113,14 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### **3. Configuração do Frontend**
+### **2. Configuração do Frontend**
 ```bash
 npm install
 # ou
 yarn install
 ```
 
-### **4. Configuração do Banco de Dados (Opcional)**
+### **3. Configuração do Banco de Dados (Opcional)**
 ```bash
 # Instalar MongoDB (se desejar usar ArcticDB)
 # Windows: https://docs.mongodb.com/manual/tutorial/install-mongodb-on-windows/
@@ -197,151 +189,16 @@ POST /api/performance/analyze
 POST /api/performance/compare-strategies
 POST /api/performance/tearsheet
 ```
-
-### **Exemplo de Requisição**
-```javascript
-// Otimização de portfólio
-const response = await fetch('/api/portfolio/optimize', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    tickers: ['PETR4.SA', 'VALE3.SA', 'ITUB4.SA'],
-    method: 'max_sharpe',
-    risk_free_rate: 0.1075,
-    use_ml_predictions: true
-  })
-});
 ```
-
-## 🧪 **Testes**
-
-### **Backend**
-```bash
-cd api
-python -m pytest tests/
-python test_valuation_integration.py
-python test_frontend_integration.py
-```
-
-### **Frontend**
-```bash
-npm test
-# ou
-yarn test
-```
-
-## 📊 **Exemplos de Uso**
-
-### **1. Análise de Valuation Completa**
-```python
-from services.valuation_engine import get_stock_valuation
-
-# Analisar PETR4
-result = get_stock_valuation('PETR4')
-print(f"Preço atual: R$ {result['current_price']:.2f}")
-print(f"Preço-alvo: R$ {result['target_price']:.2f}")
-print(f"Potencial: {result['upside_potential']:.1f}%")
-print(f"Recomendação: {result['recommendation']}")
-```
-
-### **2. Otimização de Portfólio com ML**
-```python
-from portfolio_optimizer import PortfolioOptimizer
-
-optimizer = PortfolioOptimizer()
-optimizer.load_data(['PETR4.SA', 'VALE3.SA', 'ITUB4.SA'])
-
-# Otimizar com Machine Learning
-result = optimizer.optimize_portfolio(
-    method='max_sharpe',
-    use_ml_predictions=True
-)
-```
-
-### **3. Análise de Performance**
-```python
-from services.performance_analyzer import PerformanceAnalyzer
-
-analyzer = PerformanceAnalyzer()
-metrics = analyzer.calculate_performance_metrics(
-    portfolio_returns,
-    risk_free_rate=0.1075
-)
-```
-
-## 🛠️ **Configuração Avançada**
-
-### **Variáveis de Ambiente**
-```bash
-# .env (opcional)
-FLASK_ENV=development
-MONGODB_URI=mongodb://localhost:27017
-CACHE_TIMEOUT=300
-ML_ENABLED=true
-```
-
-### **Cache Redis (Produção)**
-```python
-# Substituir SimpleCache por Redis
-CACHE_TYPE = "RedisCache"
-CACHE_REDIS_URL = "redis://localhost:6379"
-```
-
-## 🚀 **Deploy em Produção**
-
-### **Docker** (Recomendado)
-```dockerfile
-# Dockerfile.backend
-FROM python:3.11-slim
-WORKDIR /app
-COPY api/requirements.txt .
-RUN pip install -r requirements.txt
-COPY api/ .
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "app:app"]
-```
-
-### **Vercel/Netlify** (Frontend)
-```bash
-npm run build
-# Deploy automático via Git integration
-```
-
-## 🤝 **Contribuição**
-
-1. **Fork** o projeto
-2. Crie uma **branch** para sua feature (`git checkout -b feature/AmazingFeature`)
-3. **Commit** suas mudanças (`git commit -m 'Add some AmazingFeature'`)
-4. **Push** para a branch (`git push origin feature/AmazingFeature`)
-5. Abra um **Pull Request**
-
-### **Guidelines**
-- Siga os padrões de código existentes
-- Adicione testes para novas funcionalidades
-- Atualize a documentação quando necessário
-- Use **commits semânticos** (feat, fix, docs, etc.)
-
 ## 📄 **Licença**
 
 Este projeto está licenciado sob a **MIT License** - veja o arquivo [LICENSE](LICENSE) para detalhes.
 
 ## 👥 **Autores**
 
-- **Equipe Astrus** - *Desenvolvimento inicial* - [AstrusTeam](https://github.com/astrus-team)
+- **Christian Santana ** - [https://www.linkedin.com/in/christian-santana1/]
 
-## 🙏 **Agradecimentos**
-
-- **PyPortfolioOpt** pela excelente biblioteca de otimização
-- **pyfolio** pela análise de performance profissional
-- **yfinance** pelos dados financeiros gratuitos
-- **shadcn/ui** pelos componentes UI elegantes
-- **Fundamentus** pelos dados fundamentalistas brasileiros
-
-## 📞 **Suporte**
-
-- **Issues**: [GitHub Issues](https://github.com/seu-usuario/astrus-valuation/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/seu-usuario/astrus-valuation/discussions)
-- **Email**: astrus@exemplo.com
-
+- **Email**: cfsandrade5@gmail.com
 ---
 
 **⭐ Se este projeto foi útil para você, considere dar uma estrela no GitHub!**

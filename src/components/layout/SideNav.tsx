@@ -29,7 +29,8 @@ import {
   CheckSquare,
   HelpCircle,
   ShieldAlert,
-  Calculator
+  Calculator,
+  Brain
 } from "lucide-react";
 
 // Interface para os itens de navegação
@@ -245,6 +246,12 @@ export function SideNav() {
         icon: <PieChart className="h-5 w-5" />,
         label: "Performance",
         description: "Análise avançada de performance com pyfolio e empyrical"
+      },
+      {
+        to: "/optimization",
+        icon: <Brain className="h-5 w-5" />,
+        label: "Otimização IA",
+        description: "Otimização avançada de portfólio com SKFolio e IA"
       }
     ]
   };
