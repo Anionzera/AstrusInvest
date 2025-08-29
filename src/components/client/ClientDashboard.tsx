@@ -525,7 +525,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ clienteId }) => {
                 const candidate = map?.get(backKey);
                 if (candidate != null) {
                   pt = candidate;
-                  if (pt != null && scale != null) pt = pt * scale;
+                if (pt != null && scale != null) pt = pt * scale;
                   break;
                 }
                 backIdx -= 1;
