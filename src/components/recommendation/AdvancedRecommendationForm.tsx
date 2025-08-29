@@ -33,6 +33,9 @@ import { v4 as uuidv4 } from "uuid";
 import { db, Cliente } from "@/lib/db";
 import { Asset, AllocationStrategy } from "@/lib/investmentUtils";
 import { ClientContext, generateSmartRecommendation, EnhancedAssetClass } from "@/lib/smartRecommendationEngine";
+import { clientsApi } from "@/services/clientsService";
+import { recommendationsApi } from "@/services/recommendationsService";
+import { api } from "@/services/api";
 
 // Importação dos componentes de passos
 import ClientSelector from "./ClientSelector";
@@ -647,7 +650,13 @@ const AdvancedRecommendationForm: React.FC<AdvancedRecommendationFormProps> = ({
     
     setIsSubmitting(true);
     try {
-      // Gerar ID único para a recomendação
+      // Tentar obter o UUID do cliente no servidor
+      let serverClientId: string | null = null;
+      try {
+        const list = await clientsApi.list();
+        serverClientId = list.find(x => x.email?.toLowerCase() === (selectedClient?.email || '').toLowerCase())?.id || null;
+      } catch { /* offline */ }
+      const online = await api.health().then(h => h.ok && h.db).catch(() => false);
       const recommendationId = uuidv4();
       
       // Criar um objeto de alocação normalizado para garantir consistência
@@ -665,57 +674,71 @@ const AdvancedRecommendationForm: React.FC<AdvancedRecommendationFormProps> = ({
         allocationAsObject[item.name] = item.allocation;
       });
 
-      // Criar objeto de recomendação completo no formato esperado pelo banco de dados
-      const recommendation = {
-        id: recommendationId,
-        clienteId: selectedClient?.id || '',
-        titulo: `Recomendação para ${selectedClient?.nome}`,
-        descricao: `Recomendação de investimentos para ${selectedClient?.nome} com perfil ${riskProfileData.profile} e horizonte de ${horizonData.years} anos.`,
-        dataCriacao: new Date(),
-        status: 'draft',
-        perfilRisco: riskProfileData.profile,
-        horizonteInvestimento: `${horizonData.years} anos`,
-        valorInvestimento: horizonData.amount,
-        estrategia: strategyData.name,
-        // Salvar a alocação em MÚLTIPLOS formatos para garantir compatibilidade com visualização
-        alocacaoAtivos: normalizedAllocation,
-        // Salvar como objeto direto para acesso fácil
-        allocation: allocationAsObject, // Usar dados reais, não valores fixos
-        // Campo conteudo para armazenar todos os detalhes da recomendação
-        conteudo: {
-          clienteData: {
-            id: selectedClient?.id,
-            name: selectedClient?.nome,
-            email: selectedClient?.email
-          },
-          perfilRisco: riskProfileData,
-          horizonte: horizonData,
-          estrategia: strategyData,
-          // Salvar alocação em múltiplos formatos para compatibilidade
-          alocacao: normalizedAllocation,
-          // Formato de objeto chave-valor para compatibilidade
-          alocacaoRecomendada: allocationAsObject, // Usar dados reais, não valores fixos
-          // Também incluir em outra localização alternativa
-          allocationData: allocationAsObject, // Usar dados reais, não valores fixos
-          objetivo: horizonData.objective,
-          justificativa: "Recomendação baseada no perfil de risco e horizonte de investimento do cliente",
-          observacoes: "Recomendação gerada através do sistema de recomendação avançada",
-          projecoes: {
-            pessimistic: assetAllocationData.scenarioProjections?.pessimistic || 0,
-            baseline: assetAllocationData.scenarioProjections?.baseline || 0,
-            optimistic: assetAllocationData.scenarioProjections?.optimistic || 0
-          }
+      // Objeto de conteúdo consolidado
+      const content = {
+        clienteData: {
+          id: selectedClient?.id,
+          name: selectedClient?.nome,
+          email: selectedClient?.email
+        },
+        perfilRisco: riskProfileData,
+        horizonte: horizonData,
+        estrategia: strategyData,
+        alocacao: normalizedAllocation,
+        alocacaoRecomendada: allocationAsObject,
+        allocationData: allocationAsObject,
+        objetivo: horizonData.objective,
+        justificativa: "Recomendação baseada no perfil de risco e horizonte de investimento do cliente",
+        observacoes: "Recomendação gerada através do sistema de recomendação avançada",
+        projecoes: {
+          pessimistic: assetAllocationData.scenarioProjections?.pessimistic || 0,
+          baseline: assetAllocationData.scenarioProjections?.baseline || 0,
+          optimistic: assetAllocationData.scenarioProjections?.optimistic || 0
         }
       };
-      
-      // Salvar no banco de dados
-      await db.recomendacoes.add(recommendation);
+
+      // Tentar salvar no servidor
+      let finalId = recommendationId;
+      if (online && serverClientId) {
+        try {
+          finalId = await recommendationsApi.create({
+            client_id: serverClientId,
+            title: `Recomendação para ${selectedClient?.nome}`,
+            description: `Recomendação de investimentos para ${selectedClient?.nome} com perfil ${riskProfileData.profile} e horizonte de ${horizonData.years} anos.`,
+            status: 'draft',
+            risk_profile: riskProfileData.profile,
+            investment_horizon: `${horizonData.years} anos`,
+            investment_amount: horizonData.amount,
+            content,
+            allocation: allocationAsObject,
+          });
+        } catch {
+          // fallback para cache local
+        }
+      }
+
+      // Salvar também no cache local para offline/compatibilidade
+      try {
+        await db.recomendacoes.add({
+          id: finalId,
+          clienteId: selectedClient?.id || '',
+          titulo: `Recomendação para ${selectedClient?.nome}`,
+          descricao: `Recomendação de investimentos para ${selectedClient?.nome} com perfil ${riskProfileData.profile} e horizonte de ${horizonData.years} anos.`,
+          dataCriacao: new Date(),
+          status: 'draft',
+          perfilRisco: riskProfileData.profile as any,
+          horizonteInvestimento: `${horizonData.years} anos` as any,
+          conteudo: content,
+          // Guardar também a alocação canônica no cache local para evitar divergências
+          allocation: allocationAsObject as any,
+        } as any);
+      } catch { /* ignore */ }
       
       toast.success("Recomendação salva com sucesso!");
       
       // Redirecionar para a página de visualização
       setTimeout(() => {
-        navigate(`/recommendation/${recommendationId}`);
+        navigate(`/recommendation/${finalId}`);
       }, 1500);
     } catch (error) {
       console.error("Erro ao salvar recomendação:", error);
@@ -1027,7 +1050,13 @@ const AdvancedRecommendationForm: React.FC<AdvancedRecommendationFormProps> = ({
                   targetObjective: horizonData.objective
                 }}
                 investmentStrategy={strategyData.name}
-                onUpdateAssetAllocation={setAssetAllocationData}
+                onUpdateAssetAllocation={(data) => {
+                  // manter sempre a última alocação escolhida pelo usuário ao navegar entre abas
+                  setAssetAllocationData(prev => ({
+                    ...prev,
+                    ...data,
+                  }));
+                }}
                 onNext={() => setCurrentStep("compliance")}
                 onBack={() => setCurrentStep("strategy")}
               />

@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 
 const PortfolioManager: React.FC = () => {
-  const { clienteId } = useParams<{ clienteId: string }>();
+  const params = useParams();
+  const clienteId = (params as any).clienteId || (params as any).id;
   const [showAnalysis, setShowAnalysis] = useState(false);
   const navigate = useNavigate();
 
@@ -14,7 +15,7 @@ const PortfolioManager: React.FC = () => {
     navigate(-1);
   };
 
-  if (!clienteId || isNaN(Number(clienteId))) {
+  if (!clienteId) {
     return (
       <div className="p-6">
         <div className="flex flex-col items-center justify-center h-96 gap-4">
@@ -28,7 +29,7 @@ const PortfolioManager: React.FC = () => {
     );
   }
 
-  const clienteIdNumber = Number(clienteId);
+  const clienteIdParam = clienteId;
 
   return (
     <div className="p-6 space-y-6">
@@ -43,12 +44,12 @@ const PortfolioManager: React.FC = () => {
 
       {showAnalysis ? (
         <PortfolioAnalysisView 
-          clienteId={clienteIdNumber} 
+          clienteId={clienteIdParam} 
           onClose={() => setShowAnalysis(false)} 
         />
       ) : (
         <PositionManager 
-          clienteId={clienteIdNumber} 
+          clienteId={clienteIdParam} 
           onAnalyzePortfolio={() => setShowAnalysis(true)} 
         />
       )}

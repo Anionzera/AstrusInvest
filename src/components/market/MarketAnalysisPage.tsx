@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { ChevronDown, ChevronUp, BarChart, LineChart, PieChart, TrendingUp, TrendingDown, Search, Globe, Bitcoin } from 'lucide-react';
+import { ChevronDown, ChevronUp, BarChart, LineChart, TrendingUp, TrendingDown, Search, Globe, Bitcoin } from 'lucide-react';
 import MarketDataComponent from './MarketData';
 import StockChart from './StockChart';
 import MacroeconomicScenario from './MacroeconomicScenario';
@@ -36,10 +36,6 @@ const MarketAnalysisPage: React.FC = () => {
               <LineChart className="h-4 w-4" />
               <span>Análise Técnica</span>
             </TabsTrigger>
-            <TabsTrigger value="fundamental-analysis" className="gap-2">
-              <PieChart className="h-4 w-4" />
-              <span>Análise Fundamentalista</span>
-            </TabsTrigger>
             <TabsTrigger value="macroeconomic" className="gap-2">
               <Globe className="h-4 w-4" />
               <span>Cenário Macroeconômico</span>
@@ -56,7 +52,7 @@ const MarketAnalysisPage: React.FC = () => {
               primaryColor="blue"
             />
             <MarketIndexCard 
-              symbol="^IFIX" 
+              symbol="IFIX.SA" 
               name="Índice Fundos Imobiliários" 
               icon={<BarChart className="h-8 w-8 text-green-500" />} 
               primaryColor="green"
@@ -99,27 +95,6 @@ const MarketAnalysisPage: React.FC = () => {
 
         <TabsContent value="technical-analysis" className="space-y-4">
           <TechnicalAnalysis />
-        </TabsContent>
-
-        <TabsContent value="fundamental-analysis" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Análise Fundamentalista</CardTitle>
-              <CardDescription>
-                Explore os dados fundamentalistas das empresas para tomada de decisão de investimento
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="text-center py-12 text-gray-500">
-                <PieChart className="mx-auto h-12 w-12 mb-4 opacity-40" />
-                <p className="text-lg font-medium">Módulo de Análise Fundamentalista em desenvolvimento</p>
-                <p className="max-w-lg mx-auto mt-2">
-                  Em breve você poderá analisar indicadores fundamentalistas como P/L, P/VP, 
-                  Dividend Yield, ROE e outros.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
         </TabsContent>
 
         <TabsContent value="macroeconomic" className="space-y-4">

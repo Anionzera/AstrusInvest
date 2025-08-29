@@ -1,14 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Table,
-  TableBody,
-  TableCaption,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -126,23 +118,30 @@ export const RecommendationTable: React.FC<RecommendationTableProps> = ({
     );
   };
   
-  // Formatar percentual de alocação
-  const formatAllocation = (allocation: any[]) => {
-    if (!allocation || !Array.isArray(allocation) || allocation.length === 0) {
-      return 'N/A';
+  // Formatar percentual de alocação (suporta formato canônico e arrays antigos)
+  const formatAllocation = (rec: any) => {
+    // 1) Formato canônico: objeto allocation { classe: percentual }
+    const allocObj = rec.allocation || rec.conteudo?.allocationData || rec.conteudo?.alocacaoRecomendada;
+    if (allocObj && typeof allocObj === 'object' && !Array.isArray(allocObj)) {
+      return Object.entries(allocObj as Record<string, number>)
+        .map(([name, pct]) => `${Math.round(Number(pct || 0))}% ${name}`)
+        .join(', ');
+    }
+
+    // 2) Formato antigo: array de itens
+    const allocArr = rec.conteudo?.alocacao;
+    if (Array.isArray(allocArr) && allocArr.length > 0) {
+      const categories = allocArr.reduce((acc: Record<string, number>, asset: any) => {
+        const category = asset.type || asset.category || 'Outros';
+        acc[category] = (acc[category] || 0) + (asset.allocation || 0);
+        return acc;
+      }, {});
+      return Object.entries(categories)
+        .map(([cat, percentage]) => `${Math.round(percentage)}% ${cat}`)
+        .join(', ');
     }
     
-    // Agrupa por tipo principal de ativo
-    const categories = allocation.reduce((acc: Record<string, number>, asset) => {
-      const category = asset.type || asset.category || 'Outros';
-      acc[category] = (acc[category] || 0) + asset.allocation;
-      return acc;
-    }, {});
-    
-    // Formata para exibição (ex: "60% RF, 20% RV, 20% Alt")
-    return Object.entries(categories)
-      .map(([cat, percentage]) => `${Math.round(percentage)}% ${cat}`)
-      .join(', ');
+    return 'N/A';
   };
   
   // Navegar para a página de detalhes
@@ -285,16 +284,28 @@ export const RecommendationTable: React.FC<RecommendationTableProps> = ({
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger className="text-left underline underline-offset-4 decoration-dotted decoration-muted-foreground/50">
-                        {formatAllocation(rec.conteudo?.alocacao || [])}
+                        {formatAllocation(rec as any)}
                       </TooltipTrigger>
                       <TooltipContent className="max-w-sm">
                         <div className="space-y-1 p-1">
-                          {(rec.conteudo?.alocacao || []).map((asset: any, i: number) => (
-                            <div key={i} className="flex justify-between text-xs">
-                              <span>{asset.name}:</span>
-                              <span className="font-medium">{asset.allocation}%</span>
-                            </div>
-                          ))}
+                          {(() => {
+                            const allocObj = (rec as any).allocation || rec.conteudo?.allocationData || rec.conteudo?.alocacaoRecomendada;
+                            if (allocObj && typeof allocObj === 'object' && !Array.isArray(allocObj)) {
+                              return Object.entries(allocObj as Record<string, number>).map(([name, pct], i) => (
+                                <div key={i} className="flex justify-between text-xs">
+                                  <span>{name}:</span>
+                                  <span className="font-medium">{Math.round(Number(pct || 0))}%</span>
+                                </div>
+                              ));
+                            }
+                            const allocArr = rec.conteudo?.alocacao || [];
+                            return allocArr.map((asset: any, i: number) => (
+                              <div key={i} className="flex justify-between text-xs">
+                                <span>{asset.name}:</span>
+                                <span className="font-medium">{asset.allocation}%</span>
+                              </div>
+                            ));
+                          })()}
                         </div>
                       </TooltipContent>
                     </Tooltip>

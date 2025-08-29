@@ -1108,13 +1108,13 @@ def health_check():
             "timestamp": datetime.now().isoformat()
         }), 500
 
-@skfolio_bp.route('/brazilian-stocks/optimize', methods=['POST'])
-def optimize_brazilian_portfolio():
+@skfolio_bp.route('/global-portfolio/optimize', methods=['POST'])
+def optimize_global_portfolio():
     """
-    Otimiza portfólio com qualquer ticker via yfinance
+    Otimiza portfólio com qualquer ticker global via yfinance
     
     Body:
-        symbols: Lista de símbolos (ex: ['PETR4.SA', 'AAPL', 'BTC-USD'])
+        symbols: Lista de símbolos (ex: ['PETR4.SA', 'AAPL', 'BTC-USD', 'TSLA'])
         period: Período de dados ('1y', '2y', '3y', '5y')
         optimization_type: Tipo de otimização ('mean_risk', 'risk_budgeting', 'hrp')
         config: Configurações opcionais
@@ -1133,8 +1133,7 @@ def optimize_brazilian_portfolio():
         symbols = data['symbols']
         period = data.get('period', '2y')
         optimization_type = data.get('optimization_type', 'mean_risk')
-        auto_format = data.get('auto_format', True)
-        include_benchmark = data.get('include_benchmark', False)  # Desabilitado por padrão para tickers customizados
+        include_benchmark = data.get('include_benchmark', True)
         include_charts = data.get('include_charts', False)
         config_data = data.get('config', {})
         
@@ -1145,16 +1144,15 @@ def optimize_brazilian_portfolio():
         
         service = get_skfolio_service()
         
-        # Carregar dados brasileiros via yfinance com ^BVSP como benchmark
-        prices = service.load_brazilian_stocks_data(
+        # Carregar dados globais via yfinance com benchmark automático
+        prices = service.load_global_market_data(
             symbols=symbols,
             period=period,
-            auto_format=auto_format,
-            include_benchmark=True  # SEMPRE ^BVSP para ações brasileiras
+            include_benchmark=include_benchmark
         )
         
         # Excluir benchmark dos dados de otimização (mantém apenas para comparação)
-        benchmark_symbols = ['^BVSP', '^IBOV', 'BOVA11.SA', '^GSPC', '^IXIC', '^DJI']  # Benchmarks globais
+        benchmark_symbols = ['^BVSP', '^IBOV', 'BOVA11.SA', '^GSPC', '^IXIC', '^DJI', 'BTC-USD']  # Benchmarks globais
         optimization_prices = prices.copy()
         
         # Remover colunas de benchmark para otimização
@@ -1450,37 +1448,42 @@ def optimize_brazilian_portfolio():
             "timestamp": datetime.now().isoformat()
         }), 500
 
-@skfolio_bp.route('/brazilian-stocks/sample-portfolio', methods=['GET'])
-def get_sample_brazilian_portfolio():
+@skfolio_bp.route('/global-portfolio/sample-portfolio', methods=['GET'])
+def get_sample_global_portfolio():
     """
-    Obtém uma carteira exemplo com principais ações brasileiras otimizada
+    Obtém uma carteira exemplo com ativos globais diversificados otimizada
     
     Query Params:
         optimization_type: Tipo de otimização (padrão: 'mean_risk')
         period: Período de dados (padrão: '2y')
         
     Returns:
-        JSON com carteira exemplo otimizada
+        JSON com carteira exemplo global otimizada
     """
     try:
         optimization_type = request.args.get('optimization_type', 'mean_risk')
         period = request.args.get('period', '2y')
         
-        logger.info(f"Gerando carteira exemplo brasileira - tipo: {optimization_type}, período: {period}")
+        logger.info(f"Gerando carteira exemplo global - tipo: {optimization_type}, período: {period}")
         
         service = get_skfolio_service()
         
-        # Obter dados da carteira exemplo
-        prices = service.get_sample_brazilian_portfolio_data()
+        # Obter dados da carteira exemplo global
+        symbols = ['PETR4.SA', 'AAPL', 'BTC-USD', 'TSLA', 'MSFT']
+        prices = service.load_global_market_data(
+            symbols=symbols,
+            period=period,
+            include_benchmark=True
+        )
         
         # Excluir benchmark dos dados de otimização
-        benchmark_symbols = ['^BVSP', '^IBOV', 'BOVA11.SA']
+        benchmark_symbols = ['^BVSP', '^IBOV', 'BOVA11.SA', '^GSPC', '^IXIC', '^DJI', 'BTC-USD']
         optimization_prices = prices.copy()
         
         for benchmark_symbol in benchmark_symbols:
             if benchmark_symbol in optimization_prices.columns:
                 optimization_prices = optimization_prices.drop(columns=[benchmark_symbol])
-                logger.info(f"Removido benchmark {benchmark_symbol} da carteira exemplo")
+                logger.info(f"Removido benchmark {benchmark_symbol} da carteira exemplo global")
         
         returns = service.prepare_returns(optimization_prices)
         
@@ -1576,33 +1579,45 @@ def get_sample_brazilian_portfolio():
             "timestamp": datetime.now().isoformat()
         }), 500
 
-@skfolio_bp.route('/brazilian-stocks/available-symbols', methods=['GET'])
-def get_available_brazilian_symbols():
+@skfolio_bp.route('/global-portfolio/available-symbols', methods=['GET'])
+def get_available_global_symbols():
     """
-    Lista símbolos de ações brasileiras populares organizados por setor
+    Lista símbolos de ativos globais populares organizados por categoria
     
     Returns:
-        JSON com símbolos organizados por setores
+        JSON com símbolos organizados por categorias globais
     """
     try:
-        symbols_by_sector = {
-            "Bancos": [
-                {"symbol": "ITUB4", "name": "Itaú Unibanco PN"},
-                {"symbol": "BBDC4", "name": "Bradesco PN"},
-                {"symbol": "BBAS3", "name": "Banco do Brasil ON"},
-                {"symbol": "BBSE3", "name": "BB Seguridade ON"},
-                {"symbol": "BPAC11", "name": "BTG Pactual UNT"}
+        symbols_by_category = {
+            "Ações Brasileiras": [
+                {"symbol": "PETR4.SA", "name": "Petrobras PN"},
+                {"symbol": "VALE3.SA", "name": "Vale ON"},
+                {"symbol": "ITUB4.SA", "name": "Itaú Unibanco PN"},
+                {"symbol": "BBDC4.SA", "name": "Bradesco PN"},
+                {"symbol": "ABEV3.SA", "name": "Ambev ON"},
+                {"symbol": "B3SA3.SA", "name": "B3 ON"},
+                {"symbol": "WEGE3.SA", "name": "WEG ON"},
+                {"symbol": "RENT3.SA", "name": "Localiza ON"}
             ],
-            "Petróleo e Gás": [
-                {"symbol": "PETR4", "name": "Petrobras PN"},
-                {"symbol": "PETR3", "name": "Petrobras ON"},
-                {"symbol": "PRIO3", "name": "PetroRio ON"}
+            "Ações Americanas": [
+                {"symbol": "AAPL", "name": "Apple Inc"},
+                {"symbol": "MSFT", "name": "Microsoft Corporation"},
+                {"symbol": "GOOGL", "name": "Alphabet Inc"},
+                {"symbol": "TSLA", "name": "Tesla Inc"},
+                {"symbol": "AMZN", "name": "Amazon.com Inc"},
+                {"symbol": "NVDA", "name": "NVIDIA Corporation"},
+                {"symbol": "META", "name": "Meta Platforms Inc"},
+                {"symbol": "NFLX", "name": "Netflix Inc"}
             ],
-            "Mineração": [
-                {"symbol": "VALE3", "name": "Vale ON"},
-                {"symbol": "CSNA3", "name": "CSN ON"},
-                {"symbol": "USIM5", "name": "Usiminas PNA"},
-                {"symbol": "GGBR4", "name": "Gerdau PN"}
+            "Criptomoedas": [
+                {"symbol": "BTC-USD", "name": "Bitcoin"},
+                {"symbol": "ETH-USD", "name": "Ethereum"},
+                {"symbol": "BNB-USD", "name": "Binance Coin"},
+                {"symbol": "ADA-USD", "name": "Cardano"},
+                {"symbol": "SOL-USD", "name": "Solana"},
+                {"symbol": "DOT-USD", "name": "Polkadot"},
+                {"symbol": "MATIC-USD", "name": "Polygon"},
+                {"symbol": "AVAX-USD", "name": "Avalanche"}
             ],
             "Varejo": [
                 {"symbol": "MGLU3", "name": "Magazine Luiza ON"},
@@ -1802,4 +1817,32 @@ def generate_risk_return_scatter():
         return jsonify({
             'success': False,
             'error': str(e)
-        }), 500 
+        }), 500
+
+# =====================================
+# ROTAS DE COMPATIBILIDADE (LEGACY)
+# =====================================
+
+@skfolio_bp.route('/brazilian-stocks/optimize', methods=['POST'])
+def optimize_brazilian_portfolio_legacy():
+    """
+    Rota de compatibilidade para otimização de portfólio brasileiro
+    Redireciona para o endpoint global
+    """
+    return optimize_global_portfolio()
+
+@skfolio_bp.route('/brazilian-stocks/sample-portfolio', methods=['GET'])
+def get_sample_brazilian_portfolio_legacy():
+    """
+    Rota de compatibilidade para carteira exemplo brasileira
+    Redireciona para o endpoint global
+    """
+    return get_sample_global_portfolio()
+
+@skfolio_bp.route('/brazilian-stocks/available-symbols', methods=['GET'])
+def get_available_brazilian_symbols_legacy():
+    """
+    Rota de compatibilidade para símbolos brasileiros
+    Redireciona para o endpoint global
+    """
+    return get_available_global_symbols() 

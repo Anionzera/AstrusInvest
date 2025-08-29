@@ -239,7 +239,7 @@ interface PortfolioData {
 const AIPortfolioCharts: React.FC = () => {
   const [portfolioData, setPortfolioData] = useState<PortfolioData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedSymbols, setSelectedSymbols] = useState<string[]>(['PETR4.SA', 'VALE3.SA', 'ITUB4.SA', 'AAPL', 'TSLA']);
+  const [selectedSymbols, setSelectedSymbols] = useState<string[]>(['PETR4.SA', 'AAPL', 'BTC-USD', 'TSLA', 'MSFT']);
   const [period, setPeriod] = useState<string>('2y');
   const [optimizationType, setOptimizationType] = useState<string>('mean_risk');
 
@@ -255,7 +255,7 @@ const AIPortfolioCharts: React.FC = () => {
 
     setIsLoading(true);
     try {
-      const response = await fetch('/api/skfolio/brazilian-stocks/optimize', {
+      const response = await fetch('/api/skfolio/global-portfolio/optimize', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

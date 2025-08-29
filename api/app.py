@@ -11,6 +11,7 @@ import requests
 import hashlib
 import hmac
 import urllib.parse
+import re
 from flask_caching import Cache
 
 # Importar as rotas do ArcticDB
@@ -27,6 +28,17 @@ from routes.performance_routes import performance_bp
 
 # Importar as rotas do SKFolio
 from routes.skfolio_routes import skfolio_bp
+from routes.clients_routes import clients_bp
+from routes.recommendation_routes import recommendations_bp
+from routes.portfolio_routes import portfolios_bp
+from routes.position_routes import positions_bp
+from routes.history_routes import history_bp
+from routes.auth_routes import auth_bp
+from routes.health_routes import health_bp
+from routes.indexers_routes import indexers_bp
+from routes.fixed_income_routes import fi_bp
+from db.session import get_engine
+from models import Base  # ensures models are imported and tables are registered
 
 # Importar as novas rotas de Valuation V2 (comentado - arquivo não existe)
 # from routes.valuation_routes_v2 import register_valuation_v2_routes
@@ -36,7 +48,14 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 logger = logging.getLogger('yfinance-api')
 
 app = Flask(__name__)
-CORS(app)  # Habilita CORS para todas as rotas
+# CORS amplo incluindo Content-Type em preflight
+CORS(
+    app,
+    origins=["http://localhost:5173", "http://127.0.0.1:5173", "*"],
+    allow_headers=["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin"],
+    methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    supports_credentials=False,
+)
 
 # Registrar blueprint do ArcticDB
 app.register_blueprint(arctic_bp, url_prefix='/api/arctic')
@@ -52,6 +71,24 @@ app.register_blueprint(performance_bp)
 
 # Registrar blueprint do SKFolio
 app.register_blueprint(skfolio_bp)
+
+# Registrar novos blueprints Postgres
+app.register_blueprint(clients_bp)
+app.register_blueprint(recommendations_bp)
+app.register_blueprint(portfolios_bp)
+app.register_blueprint(positions_bp)
+app.register_blueprint(history_bp)
+app.register_blueprint(auth_bp)
+app.register_blueprint(health_bp)
+app.register_blueprint(indexers_bp)
+app.register_blueprint(fi_bp)
+
+# Garantir schema e tabelas no startup
+try:
+    engine = get_engine()
+    Base.metadata.create_all(bind=engine)
+except Exception as e:
+    logger.error(f"Erro ao inicializar banco de dados: {e}")
 
 # Registrar as novas rotas de Valuation V2 (comentado - arquivo não existe)
 # register_valuation_v2_routes(app)
@@ -103,25 +140,38 @@ def clear_symbol_cache(symbol):
 
 # Função auxiliar para formatar símbolo corretamente para o Yahoo Finance
 def format_symbol(symbol):
-    # Decodificar símbolo se estiver em formato URL encoded
-    if '%5E' in symbol:
-        symbol = symbol.replace('%5E', '^')
-    
-    if '%3D' in symbol:  # = em URL encoded
-        symbol = symbol.replace('%3D', '=')
-    
-    # Remover qualquer sufixo .SA adicionado indevidamente aos índices e moedas
-    if symbol.startswith('^') and symbol.endswith('.SA'):
-        return symbol[:-3]  # Remove .SA para índices
-    
-    if '=' in symbol and symbol.endswith('.SA'):
-        return symbol[:-3]  # Remove .SA para taxas de câmbio
-        
-    # Para ações brasileiras comuns, adicionar .SA se não tiver
-    if not '.' in symbol and not '^' in symbol and not '=' in symbol:
-        return f"{symbol}.SA"
-        
-    return symbol
+    """Formata o símbolo respeitando regras da B3 sem quebrar ativos internacionais.
+
+    - Não adiciona .SA para índices (^), pares (=) ou quando já houver sufixo.
+    - Só adiciona .SA automaticamente se o padrão do ticker for de B3
+      (quatro letras seguidas de 1-2 dígitos e sufixo opcional de letras),
+      ex.: PETR4, VALE3, BOVA11, IVVB11, AAPL34.
+    """
+    s = symbol or ""
+    # Decodificar símbolos URL-encoded
+    if '%5E' in s:
+        s = s.replace('%5E', '^')
+    if '%3D' in s:  # '=' em URL encoded
+        s = s.replace('%3D', '=')
+
+    # Remover .SA indevido para índices e moedas
+    if s.startswith('^') and s.endswith('.SA'):
+        return s[:-3]
+    if '=' in s and s.endswith('.SA'):
+        return s[:-3]
+
+    upper = s.strip().upper()
+    # Já possui sufixo de bolsa
+    if '.' in upper or '^' in upper or '=' in upper:
+        return upper
+
+    # Padrões típicos de tickers da B3
+    b3_pattern = re.compile(r'^[A-Z]{4}\d{1,2}([A-Z]{0,2})?$')
+    if b3_pattern.match(upper):
+        return f"{upper}.SA"
+
+    # Caso contrário, manter como ativo internacional (ex.: TSLA, AAPL, MSFT)
+    return upper
 
 # Função para determinar a melhor fonte de dados para cada tipo de ativo
 def get_best_data_source(symbol):
@@ -365,37 +415,35 @@ def get_quote():
                     "regularMarketTime": int(today.timestamp()),
                 })
         
-        # Tratamento especial para BRL=X (taxa de câmbio)
+        # Tratamento especial para BRL=X (taxa de câmbio USD/BRL)
         elif formatted_symbol == 'BRL=X':
             try:
-                # Para BRL=X, usar auto_adjust=False e priorizar Adj Close
-                history = yf.download(formatted_symbol, period="2d", progress=False, auto_adjust=False)
+                # Preferir intraday (1m) para reduzir divergência em relação à página do Yahoo
+                history = yf.download(formatted_symbol, period="5d", interval="1m", progress=False, auto_adjust=False)
                 
                 if not history.empty:
                     # Priorizar Adj Close para taxa de câmbio
                     if 'Adj Close' in history.columns:
                         close_col = 'Adj Close'
-                        logger.info("✅ Usando Adj Close para BRL=X")
+                        logger.info("✅ Usando Adj Close (1m) para BRL=X")
                     elif 'Close' in history.columns:
                         close_col = 'Close'
-                        logger.warning("⚠️ Adj Close não disponível, usando Close para BRL=X")
+                        logger.warning("⚠️ Adj Close (1m) não disponível, usando Close para BRL=X")
                     else:
                         raise ValueError("❌ Nenhuma coluna de preço encontrada para BRL=X")
                     
-                    # Para BRL=X, o Yahoo retorna USD/BRL (por exemplo, 5.5 para 5.5 reais por dólar)
                     last_close = float(history[close_col].iloc[-1])
                     prev_close = float(history[close_col].iloc[-2]) if len(history) > 1 else last_close
                     change = last_close - prev_close
                     change_percent = (change / prev_close) if prev_close else 0
                     
-                    # Manter high e low sem inversão, já que queremos o valor real em BRL
-                    high = float(history['High'].iloc[-1]) if 'High' in history else 0
-                    low = float(history['Low'].iloc[-1]) if 'Low' in history else 0
+                    high = float(history['High'].iloc[-1]) if 'High' in history else last_close
+                    low = float(history['Low'].iloc[-1]) if 'Low' in history else last_close
                     
                     return jsonify({
                         "symbol": formatted_symbol,
-                        "shortName": "Real Brasileiro/Dólar Americano",
-                        "longName": "BRL/USD",
+                        "shortName": "USD/BRL",
+                        "longName": "Dólar Americano/Real Brasileiro",
                         "regularMarketPrice": last_close,
                         "regularMarketChange": change,
                         "regularMarketChangePercent": change_percent,
@@ -407,11 +455,38 @@ def get_quote():
                         "regularMarketTime": int(history.index[-1].timestamp()),
                     })
                 else:
-                    return jsonify({"error": f"Sem dados históricos para {formatted_symbol}"}), 500
+                    # Se 1m falhar, cair para 1d de 2d
+                    history = yf.download(formatted_symbol, period="2d", interval="1d", progress=False, auto_adjust=False)
+                    if not history.empty:
+                        price = float(history['Adj Close'].iloc[-1] if 'Adj Close' in history.columns else history['Close'].iloc[-1])
+                        prev = float(history['Adj Close'].iloc[-2] if 'Adj Close' in history.columns else history['Close'].iloc[-2]) if len(history) > 1 else price
+                        return jsonify({
+                            "symbol": formatted_symbol,
+                            "shortName": "USD/BRL",
+                            "longName": "Dólar Americano/Real Brasileiro",
+                            "regularMarketPrice": price,
+                            "regularMarketPreviousClose": prev,
+                        })
+                    return jsonify({"error": f"Sem dados para {formatted_symbol}"}), 500
             except Exception as e:
                 logger.error(f"Erro no tratamento especial para BRL=X: {str(e)}")
                 logger.error(traceback.format_exc())
-                return jsonify({"error": str(e)}), 500
+                # Fallback final via info
+                try:
+                    t = yf.Ticker(formatted_symbol)
+                    info = t.info or {}
+                    price = info.get('regularMarketPrice')
+                    prev = info.get('regularMarketPreviousClose', price)
+                    return jsonify({
+                        "symbol": formatted_symbol,
+                        "shortName": "USD/BRL",
+                        "longName": "Dólar Americano/Real Brasileiro",
+                        "regularMarketPrice": price,
+                        "regularMarketPreviousClose": prev,
+                        "source": "yahoo_info_fallback"
+                    })
+                except Exception:
+                    return jsonify({"error": "Falha ao obter BRL=X"}), 500
         
         # Para outros símbolos, usar o método padrão
         ticker = yf.Ticker(formatted_symbol)
@@ -487,9 +562,9 @@ def get_history():
         # NOVA FUNCIONALIDADE: Tentar obter dados do ArcticDB primeiro se preferido
         if prefer_arctic:
             try:
-                # Importar serviço ArcticDB apenas se necessário (evita problemas se não estiver configurado)
-                from services.arctic_service import ArcticDBService
-                arctic_service = ArcticDBService()
+                # Reutilizar instância global para evitar múltiplas aberturas do LMDB
+                from services.arctic_service import get_arctic_service
+                arctic_service = get_arctic_service()
                 
                 # Determinar datas com base no período solicitado
                 end_date = datetime.datetime.now()

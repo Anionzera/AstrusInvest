@@ -294,6 +294,22 @@ export const RecommendationDetailsPage: React.FC = () => {
       const expectedReturn = period.months * monthlyRate;
       const volatility = expectedReturn * (riskProfile === 'conservador' ? 0.2 : 
                                           riskProfile === 'agressivo' ? 0.5 : 0.3);
+
+      // CDI real anual, se disponível (cache global ou sessionStorage preenchidos em outras telas)
+      let cdiAnnual: number | undefined = (window as any).__macro_cdi_annual;
+      if (typeof cdiAnnual !== 'number') {
+        try {
+          const cached = sessionStorage.getItem('macroData');
+          if (cached) {
+            const macro = JSON.parse(cached);
+            const cdi = macro?.indicadores?.taxasDI?.um_ano;
+            if (typeof cdi === 'number') cdiAnnual = cdi;
+          }
+        } catch {}
+      }
+      const cdiPeriod = typeof cdiAnnual === 'number' && isFinite(cdiAnnual)
+        ? (Math.pow(1 + (cdiAnnual / 100), period.months / 12) - 1) * 100
+        : undefined;
       
       return {
         period: period.label,
@@ -301,7 +317,7 @@ export const RecommendationDetailsPage: React.FC = () => {
         pessimisticReturn: parseFloat((expectedReturn - volatility).toFixed(2)),
         optimisticReturn: parseFloat((expectedReturn + volatility).toFixed(2)),
         benchmark: parseFloat((expectedReturn * 0.8).toFixed(2)),
-        cdi: parseFloat((period.months * 0.4).toFixed(2))
+        cdi: cdiPeriod !== undefined ? parseFloat(cdiPeriod.toFixed(2)) : undefined
       };
     });
   };

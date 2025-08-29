@@ -37,6 +37,8 @@ import {
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { db } from '@/lib/db';
+import { api } from '@/services/api';
+import { recommendationsApi } from '@/services/recommendationsService';
 import { toast } from 'sonner';
 import { AnimatedContainer, AnimatedSection } from '@/components/ui/animated-container';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -166,8 +168,28 @@ const RecommendationView = () => {
         // Não converter o ID para número, usar o parâmetro como string
         const recommendationId = id;
         
-        // Buscar recomendação
-        const recData = await db.recomendacoes.get(recommendationId);
+        // Buscar recomendação (tenta API primeiro)
+        let recData = await db.recomendacoes.get(recommendationId);
+        try {
+          const online = await api.health().then(h => h.ok && h.db).catch(() => false);
+          if (online) {
+            const list = await recommendationsApi.list();
+            const found = list.find(r => r.id === recommendationId);
+            if (found) {
+              recData = recData || {
+                id: found.id,
+                titulo: found.title,
+                descricao: found.description,
+                dataCriacao: found.created_at ? new Date(found.created_at) : new Date(),
+                status: found.status,
+                perfilRisco: found.risk_profile,
+                horizonteInvestimento: found.investment_horizon,
+                conteudo: found.content,
+                clienteId: found.client_id,
+              };
+            }
+          }
+        } catch { /* ignore */ }
         
         if (!recData) {
           toast.error("Recomendação não encontrada");
@@ -255,6 +277,10 @@ const RecommendationView = () => {
         ...recommendation,
         status: 'archived'
       });
+      try {
+        const online = await api.health().then(h => h.ok && h.db).catch(() => false);
+        if (online) await recommendationsApi.update(id, { status: 'archived' });
+      } catch { /* ignore */ }
       
       // Atualizar estado local
       setRecommendation({
@@ -274,6 +300,10 @@ const RecommendationView = () => {
     if (!id || !recommendation) return;
     
     try {
+      try {
+        const online = await api.health().then(h => h.ok && h.db).catch(() => false);
+        if (online) await recommendationsApi.delete(id);
+      } catch { /* ignore */ }
       await db.recomendacoes.delete(id);
       
       toast.success("Recomendação excluída com sucesso");
@@ -608,7 +638,7 @@ const RecommendationView = () => {
                         // Verificar todas as possíveis fontes de dados de alocação
                         let allocationData = null;
                         
-                        // Verificar no objeto allocation se existir e for um objeto (não array)
+                        // 1) Prioridade absoluta: campo canônico (objeto) salvo no Postgres/Dexie
                         if (recommendation.allocation && typeof recommendation.allocation === 'object' && !Array.isArray(recommendation.allocation)) {
                           allocationData = Object.entries(recommendation.allocation).map(([key, value]: [string, any]) => ({
                             name: key,

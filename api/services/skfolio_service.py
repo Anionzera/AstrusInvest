@@ -1226,9 +1226,8 @@ class SKFolioService:
         symbols: List[str],
         period: str = "2y",
         interval: str = "1d",
-        auto_format: bool = True,
         include_benchmark: bool = False,
-        benchmark_symbol: str = "^GSPC"
+        benchmark_symbol: str = None
     ) -> pd.DataFrame:
         """
         Carrega dados de qualquer ticker global via yfinance
@@ -1237,9 +1236,8 @@ class SKFolioService:
             symbols: Lista de símbolos (ex: ['PETR4.SA', 'AAPL', 'BTC-USD'])
             period: Período ('1y', '2y', '3y', '5y', 'max')
             interval: Intervalo ('1d', '1wk', '1mo')
-            auto_format: Formatar automaticamente símbolos brasileiros
             include_benchmark: Incluir benchmark
-            benchmark_symbol: Símbolo do benchmark (padrão: S&P 500)
+            benchmark_symbol: Símbolo do benchmark (detecta automaticamente se None)
             
         Returns:
             DataFrame com preços ajustados
@@ -1247,12 +1245,31 @@ class SKFolioService:
         try:
             self.logger.info(f"Carregando dados globais para: {symbols}")
             
+            # Detectar benchmark automaticamente se não especificado
+            if include_benchmark and benchmark_symbol is None:
+                # Detectar mercado predominante
+                has_brazilian = any('.SA' in symbol for symbol in symbols)
+                has_us = any(symbol in ['AAPL', 'MSFT', 'GOOGL', 'TSLA', 'AMZN'] or 
+                           (not '.SA' in symbol and not 'USD' in symbol and not symbol.startswith('^')) 
+                           for symbol in symbols)
+                has_crypto = any('USD' in symbol or symbol in ['BTC', 'ETH', 'BNB'] for symbol in symbols)
+                
+                if has_brazilian:
+                    benchmark_symbol = "^BVSP"
+                elif has_us:
+                    benchmark_symbol = "^GSPC"  # S&P 500
+                elif has_crypto:
+                    benchmark_symbol = "BTC-USD"  # Bitcoin como benchmark crypto
+                else:
+                    benchmark_symbol = "^GSPC"  # Default para S&P 500
+            
             # Preparar lista de símbolos
             all_symbols = symbols.copy()
             
             # Adicionar benchmark se solicitado
-            if include_benchmark and benchmark_symbol not in all_symbols:
+            if include_benchmark and benchmark_symbol and benchmark_symbol not in all_symbols:
                 all_symbols.append(benchmark_symbol)
+                self.logger.info(f"Benchmark {benchmark_symbol} adicionado automaticamente")
             
             # Abordagem robusta: baixar cada símbolo individualmente para garantir apenas Adj Close
             prices_dict = {}
@@ -1344,49 +1361,54 @@ class SKFolioService:
             self.logger.error(f"Erro ao carregar dados globais: {str(e)}")
             raise ValueError(f"Erro ao carregar dados: {str(e)}")
 
-    def load_brazilian_stocks_data(
+    def load_global_market_data(
         self,
         symbols: List[str],
         period: str = "2y", 
         interval: str = "1d",
-        auto_format: bool = True,
         include_benchmark: bool = True,
-        benchmark_symbol: str = "^BVSP"
+        benchmark_symbol: str = None
     ) -> pd.DataFrame:
         """
-        Carrega dados de ações brasileiras via yfinance de forma totalmente configurável
-        SEMPRE usa ^BVSP como benchmark para ações brasileiras
+        Carrega dados de ativos de qualquer mercado via yfinance de forma totalmente configurável
         
         Args:
-            symbols: Lista de símbolos (ex: ['PETR4', 'VALE3'] ou ['PETR4.SA', 'VALE3.SA'])
+            symbols: Lista de símbolos (ex: ['PETR4.SA', 'AAPL', 'BTC-USD'])
             period: Período de dados ('1y', '2y', '3y', '5y', 'max')
             interval: Intervalo ('1d', '1wk', '1mo')
-            auto_format: Se True, adiciona automaticamente .SA para ações brasileiras
-            include_benchmark: Se True, inclui o benchmark ^BVSP
-            benchmark_symbol: Ignorado - sempre usa ^BVSP para ações brasileiras
+            include_benchmark: Se True, inclui benchmark apropriado
+            benchmark_symbol: Benchmark específico (detecta automaticamente se None)
             
         Returns:
             DataFrame com preços dos ativos prontos para otimização
         """
         try:
-            self.logger.info(f"Carregando dados de {len(symbols)} ações brasileiras via yfinance")
+            self.logger.info(f"Carregando dados de {len(symbols)} ativos via yfinance")
             
-            # Formatar símbolos se necessário
-            formatted_symbols = []
-            for symbol in symbols:
-                if auto_format and not symbol.endswith('.SA') and not symbol.startswith('^'):
-                    formatted_symbol = f"{symbol}.SA"
+            # Detectar benchmark automaticamente se não especificado
+            if include_benchmark and benchmark_symbol is None:
+                # Detectar mercado predominante
+                has_brazilian = any('.SA' in symbol for symbol in symbols)
+                has_us = any(symbol in ['AAPL', 'MSFT', 'GOOGL', 'TSLA', 'AMZN'] or 
+                           (not '.SA' in symbol and not 'USD' in symbol and not symbol.startswith('^')) 
+                           for symbol in symbols)
+                has_crypto = any('USD' in symbol or symbol in ['BTC', 'ETH', 'BNB'] for symbol in symbols)
+                
+                if has_brazilian:
+                    benchmark_symbol = "^BVSP"
+                elif has_us:
+                    benchmark_symbol = "^GSPC"  # S&P 500
+                elif has_crypto:
+                    benchmark_symbol = "BTC-USD"  # Bitcoin como benchmark crypto
                 else:
-                    formatted_symbol = symbol
-                formatted_symbols.append(formatted_symbol)
+                    benchmark_symbol = "^GSPC"  # Default para S&P 500
             
-            # Adicionar benchmark se solicitado - SEMPRE ^BVSP para ações brasileiras
-            all_symbols = formatted_symbols.copy()
-            if include_benchmark:
-                benchmark_symbol = "^BVSP"  # FORÇAR ^BVSP sempre
+            # Adicionar benchmark se solicitado
+            all_symbols = symbols.copy()
+            if include_benchmark and benchmark_symbol:
                 if benchmark_symbol not in all_symbols:
                     all_symbols.append(benchmark_symbol)
-                    self.logger.info(f"Benchmark ^BVSP adicionado automaticamente")
+                    self.logger.info(f"Benchmark {benchmark_symbol} adicionado automaticamente")
             
             self.logger.info(f"Símbolos formatados: {all_symbols}")
             

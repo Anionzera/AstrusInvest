@@ -322,7 +322,7 @@ const PortfolioOptimizer: React.FC<PortfolioOptimizerProps> = ({
       // Extrair restrições de categorias se disponíveis
       const categoryConstraints = extractCategoryConstraints();
       
-      const response = await axios.post('http://localhost:5000/api/portfolio/optimize', {
+      const response = await axios.post('/api/portfolio/optimize', {
         tickers,
         method: optimizationMethod,
         risk_free_rate: riskFreeRate,
@@ -392,7 +392,7 @@ const PortfolioOptimizer: React.FC<PortfolioOptimizerProps> = ({
     if (tickers.length < 2) return;
     
     try {
-      const response = await axios.post('http://localhost:5000/api/portfolio/efficient-frontier', {
+      const response = await axios.post('/api/portfolio/efficient-frontier', {
         tickers,
         risk_free_rate: riskFreeRate,
         period
@@ -427,7 +427,7 @@ const PortfolioOptimizer: React.FC<PortfolioOptimizerProps> = ({
       // Extrair restrições de categorias se disponíveis
       const categoryConstraints = extractCategoryConstraints();
       
-      const response = await axios.post('http://localhost:5000/api/portfolio/discrete-allocation', {
+      const response = await axios.post('/api/portfolio/discrete-allocation', {
         tickers,
         method: optimizationMethod,
         risk_free_rate: riskFreeRate,

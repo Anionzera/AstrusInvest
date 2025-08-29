@@ -519,7 +519,7 @@ export const RecommendationHistoryTable: React.FC<RecommendationHistoryTableProp
                         </div>
                       </TableCell>
                       <TableCell>
-                        {recommendation.clientName || 'Cliente não especificado'}
+                        {recommendation.clientName || recommendation.conteudo?.clienteData?.name || 'Cliente não especificado'}
                       </TableCell>
                       <TableCell>
                         {renderStatusBadge(recommendation.status)}
@@ -653,7 +653,7 @@ export const RecommendationHistoryTable: React.FC<RecommendationHistoryTableProp
                           {recommendation.clientName ? recommendation.clientName.charAt(0) : 'C'}
                         </Avatar>
                         <span className="text-sm truncate">
-                          {recommendation.clientName || 'Cliente não especificado'}
+                          {recommendation.clientName || recommendation.conteudo?.clienteData?.name || 'Cliente não especificado'}
                         </span>
                       </div>
                       

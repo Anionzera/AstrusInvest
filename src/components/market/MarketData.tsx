@@ -140,7 +140,7 @@ const MarketDataComponent: React.FC = () => {
   const defaultStocks = ['PETR4', 'VALE3', 'ITUB4', 'BBDC4', 'ABEV3', 'MGLU3'];
   
   // Lista de índices para mostrar
-  const indices = ['^BVSP', '^IFIX', 'BRL=X'];
+  const indices = ['^BVSP', 'IFIX.SA', 'BRL=X'];
 
   const handleSearch = async () => {
     if (!searchTerm.trim()) return;

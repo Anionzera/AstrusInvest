@@ -151,7 +151,7 @@ const AdvancedPortfolioOptimizerPage: React.FC = () => {
   const loadAvailableSymbols = async () => {
     setLoadingSymbols(true);
     try {
-      const response = await fetch('/api/skfolio/brazilian-stocks/available-symbols');
+      const response = await fetch('/api/skfolio/global-portfolio/available-symbols');
       const data = await response.json();
       setAvailableSymbols(data);
     } catch (error) {
@@ -178,7 +178,7 @@ const AdvancedPortfolioOptimizerPage: React.FC = () => {
 
     setIsOptimizing(true);
     try {
-      const response = await fetch('/api/skfolio/brazilian-stocks/optimize', {
+      const response = await fetch('/api/skfolio/global-portfolio/optimize', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

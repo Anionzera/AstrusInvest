@@ -51,8 +51,8 @@ class ValuationEngine:
         
         # Múltiplos de mercado por setor (P/E médios baseados em dados históricos reais)
         self.sector_multiples = {
-            'Bancos': {'pe': 8.5, 'pb': 1.2, 'ev_ebitda': 6.0},
-            'Petróleo e Gás': {'pe': 6.8, 'pb': 0.9, 'ev_ebitda': 4.5},
+            'Bancos': {'pe': 5.9, 'pb': 1.16, 'ev_ebitda': 6.0},
+            'Petróleo e Gás': {'pe': 19.2, 'pb': 1.26, 'ev_ebitda': 4.73},
             'Mineração': {'pe': 12.0, 'pb': 1.5, 'ev_ebitda': 5.5},
             'Siderurgia': {'pe': 8.0, 'pb': 1.1, 'ev_ebitda': 4.8},
             'Telecomunicações': {'pe': 15.0, 'pb': 2.0, 'ev_ebitda': 7.0},
@@ -84,12 +84,12 @@ class ValuationEngine:
             logger.error(f"Erro ao obter dados macroeconômicos: {str(e)}")
             # Fallback para dados estáticos
             return {
-                'risk_free_rate': 0.1075,
-                'market_risk_premium': 0.06,
-                'inflation_rate': 0.045,
-                'gdp_growth': 0.025,
-                'exchange_rate': 5.0,
-                'country_risk': 250
+                'risk_free_rate': 0.15,
+                'market_risk_premium': 0.065,
+                'inflation_rate': 0.052,
+                'gdp_growth': 0.022,
+                'exchange_rate': 5.46,
+                'country_risk': 140
             }
     
     def get_comprehensive_valuation(self, symbol: str) -> Optional[ValuationResult]:
@@ -256,7 +256,7 @@ class ValuationEngine:
                 # Ajustar volatilidade baseado no setor
                 sector_volatility_multiplier = {
                     'Bancos': 1.2,
-                    'Petróleo e Gás': 1.4,
+                    'Petróleo e Gás': 6.13,
                     'Mineração': 1.3,
                     'Siderurgia': 1.2,
                     'Telecomunicações': 0.8,

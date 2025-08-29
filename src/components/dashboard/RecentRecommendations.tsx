@@ -24,6 +24,8 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { db, Recomendacao } from "@/lib/db";
+import { recommendationsApi } from "@/services/recommendationsService";
+import { api } from "@/services/api";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Link } from "react-router-dom";
@@ -69,7 +71,11 @@ const RecentRecommendations = ({
 
   const handleDelete = async (id: string) => {
     try {
-      // Excluir do banco de dados
+      const online = await api.health().then(h => h.ok && h.db).catch(() => false);
+      if (online) {
+        await recommendationsApi.delete(id);
+      }
+      // limpar local
       await db.recomendacoes.delete(id);
       
       toast({

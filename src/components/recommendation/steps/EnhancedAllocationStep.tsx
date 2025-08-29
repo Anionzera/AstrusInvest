@@ -69,7 +69,7 @@ const EnhancedAllocationStep: React.FC<AssetAllocationStepProps> = ({
 }) => {
   // Estado para controlar se estamos usando alocação recomendada ou personalizada
   const [allocationType, setAllocationType] = useState<"recomendada" | "personalizada">(
-    initialData ? "personalizada" : "recomendada"
+    (initialData as any)?.allocationType || (initialData?.allocation && initialData.allocation.length > 0 ? "personalizada" : "recomendada")
   );
   
   // Estado para alocação de ativos
@@ -136,10 +136,9 @@ const EnhancedAllocationStep: React.FC<AssetAllocationStepProps> = ({
     }
   };
   
-  // Buscar recomendação na inicialização se não houver dados iniciais
-  // ou quando a estratégia mudar
+  // Buscar recomendação apenas se a alocação atual estiver vazia
   useEffect(() => {
-    if (!initialData?.allocation || initialData.allocation.length === 0 || investmentStrategy) {
+    if (!allocation || allocation.length === 0) {
       fetchRecommendation();
     }
   }, [investmentStrategy]);
@@ -156,6 +155,17 @@ const EnhancedAllocationStep: React.FC<AssetAllocationStepProps> = ({
       )
     );
   };
+
+  // Propagar alterações manuais para o componente pai
+  useEffect(() => {
+    if (allocation && allocation.length > 0) {
+      onUpdateAssetAllocation({
+        allocation,
+        scenarioProjections: recommendationResult?.scenarioProjections,
+        regulatoryCompliance: recommendationResult?.regulatoryCompliance,
+      });
+    }
+  }, [allocation]);
   
   // Aplicar alocação recomendada
   const applyRecommendedAllocation = () => {
@@ -167,7 +177,7 @@ const EnhancedAllocationStep: React.FC<AssetAllocationStepProps> = ({
       onUpdateAssetAllocation({
         allocation: recommendationResult.enhancedAllocation,
         scenarioProjections: recommendationResult.scenarioProjections,
-        regulatoryCompliance: recommendationResult.regulatoryCompliance
+        regulatoryCompliance: recommendationResult.regulatoryCompliance,
       });
     } else {
       fetchRecommendation();
@@ -300,8 +310,16 @@ const EnhancedAllocationStep: React.FC<AssetAllocationStepProps> = ({
               <Switch 
                 checked={allocationType === "recomendada"}
                 onCheckedChange={(checked) => {
-                  if (checked) applyRecommendedAllocation();
-                  else setAllocationType("personalizada");
+                  if (checked) {
+                    applyRecommendedAllocation();
+                  } else {
+                    setAllocationType("personalizada");
+                    onUpdateAssetAllocation({
+                      allocation,
+                      scenarioProjections: recommendationResult?.scenarioProjections,
+                      regulatoryCompliance: recommendationResult?.regulatoryCompliance,
+                    });
+                  }
                 }}
               />
               <span>Recomendação Inteligente</span>

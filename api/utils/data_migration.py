@@ -83,7 +83,7 @@ def migrate_index_data(arctic_service=None):
     
     indices = [
         "^BVSP",  # Ibovespa
-        "^IFIX",  # Índice de Fundos Imobiliários
+        "IFIX.SA",  # Índice de Fundos Imobiliários
         "^GSPC",  # S&P 500
         "^IXIC",  # NASDAQ
         "^DJI",   # Dow Jones
@@ -248,7 +248,7 @@ def proactive_data_refresh(symbols=None, interval='1d', arctic_service=None):
     if symbols is None:
         # Lista de símbolos prioritários por categoria
         symbols = {
-            'brazilian_indices': ['^BVSP', '^IFIX', '^SMLL', '^IDIV'],
+            'brazilian_indices': ['^BVSP', 'IFIX.SA', '^SMLL', '^IDIV'],
             'world_indices': ['^GSPC', '^IXIC', '^DJI', '^FTSE', '^N225'],
             'brazilian_stocks': [
                 'PETR4.SA', 'VALE3.SA', 'ITUB4.SA', 'BBDC4.SA', 'ABEV3.SA', 

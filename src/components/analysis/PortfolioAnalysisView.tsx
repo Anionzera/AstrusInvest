@@ -65,7 +65,7 @@ import { useToast } from "@/components/ui/use-toast";
 import CorrelationMatrix from "./CorrelationMatrix";
 
 interface PortfolioAnalysisViewProps {
-  clienteId: number;
+  clienteId: number | string;
   onClose?: () => void;
 }
 
@@ -98,7 +98,7 @@ const PortfolioAnalysisView: React.FC<PortfolioAnalysisViewProps> = ({
         setIsLoading(true);
 
         // Buscar cliente
-        const clienteData = await db.clientes.get(clienteId);
+        const clienteData = await db.clientes.get(clienteId as any);
         if (!clienteData) {
           throw new Error("Cliente não encontrado");
         }
@@ -107,7 +107,7 @@ const PortfolioAnalysisView: React.FC<PortfolioAnalysisViewProps> = ({
         // Buscar posições do cliente
         const posicoesData = await db.posicoes
           .where("clienteId")
-          .equals(clienteId)
+          .equals(clienteId as any)
           .toArray();
         setPosicoes(posicoesData);
 
@@ -116,7 +116,7 @@ const PortfolioAnalysisView: React.FC<PortfolioAnalysisViewProps> = ({
         
         const analisesExistentes = await db.portfolioAnalyses
           .where("clienteId")
-          .equals(clienteId)
+          .equals(clienteId as any)
           .reverse()
           .sortBy("data");
         

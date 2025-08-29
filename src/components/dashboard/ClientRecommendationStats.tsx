@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { db } from "@/lib/db";
+import { api } from "@/services/api";
+import { clientsApi } from "@/services/clientsService";
+import { recommendationsApi } from "@/services/recommendationsService";
 import { useToast } from "@/components/ui/use-toast";
 import { Users, FileText, AlertTriangle } from "lucide-react";
 
@@ -16,30 +19,28 @@ const ClientRecommendationStats = () => {
     const loadStats = async () => {
       setIsLoading(true);
       try {
-        // Carregar contagem de clientes
-        const clients = await db.clientes.toArray();
-        setClientCount(clients.length);
+        const online = await api.health().then(h => h.ok && h.db).catch(() => false);
+        if (online) {
+          const [rc, rr] = await Promise.all([clientsApi.list(), recommendationsApi.list()]);
+          setClientCount(rc.length);
+          setRecommendationCount(rr.length);
 
-        // Carregar contagem de recomendações
-        const recommendations = await db.recomendacoes.toArray();
-        setRecommendationCount(recommendations.length);
-
-        // Calcular clientes sem recomendações
-        const clientIds = new Set(clients.map((client) => client.id));
-        const clientsWithRecommendations = new Set(
-          recommendations
-            .filter((rec) => rec.clienteId)
-            .map((rec) => rec.clienteId),
-        );
-
-        let withoutRecs = 0;
-        clientIds.forEach((id) => {
-          if (!clientsWithRecommendations.has(id)) {
-            withoutRecs++;
-          }
-        });
-
-        setClientsWithoutRecommendations(withoutRecs);
+          // Clientes sem recomendações (server-side via client_id)
+          const clientsWithRec = new Set(rr.map(r => r.client_id));
+          const withoutRecs = rc.filter(c => !clientsWithRec.has(c.id)).length;
+          setClientsWithoutRecommendations(withoutRecs);
+        } else {
+          // Fallback Dexie
+          const clients = await db.clientes.toArray();
+          setClientCount(clients.length);
+          const recommendations = await db.recomendacoes.toArray();
+          setRecommendationCount(recommendations.length);
+          const clientIds = new Set(clients.map(c => c.id));
+          const clientsWithRecommendations = new Set(recommendations.filter(r => r.clienteId).map(r => r.clienteId));
+          let withoutRecs = 0;
+          clientIds.forEach((id) => { if (!clientsWithRecommendations.has(id)) withoutRecs++; });
+          setClientsWithoutRecommendations(withoutRecs);
+        }
       } catch (error) {
         console.error("Erro ao carregar estatísticas:", error);
         toast({

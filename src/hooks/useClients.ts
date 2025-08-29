@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { db, Cliente } from '../lib/db';
+import { syncClientsDown, createClientSmart, updateClientSmart, deleteClientSmart } from '@/services/clientsService';
 
 /**
  * Hook para carregar e gerenciar clientes
@@ -12,46 +13,26 @@ export const useClients = (filter?: string) => {
   const { data: clients = [], isLoading, error } = useQuery<Cliente[]>({
     queryKey,
     queryFn: async () => {
-      try {
-        const allClients = await db.clientes.toArray();
-        
-        // Filtrar clientes se um filtro foi fornecido
-        if (filter) {
-          const lowerFilter = filter.toLowerCase();
-          return allClients.filter(
-            client => 
-              client.nome?.toLowerCase().includes(lowerFilter) ||
-              client.email?.toLowerCase().includes(lowerFilter) ||
-              client.telefone?.includes(filter) ||
-              client.cpf?.includes(filter)
-          );
-        }
-        
-        return allClients;
-      } catch (error) {
-        console.error('Erro ao carregar clientes:', error);
-        throw error;
+      const allClients = await syncClientsDown();
+      if (filter) {
+        const lowerFilter = filter.toLowerCase();
+        return allClients.filter(
+          client => 
+            client.nome?.toLowerCase().includes(lowerFilter) ||
+            client.email?.toLowerCase().includes(lowerFilter) ||
+            client.telefone?.includes(filter)
+        );
       }
+      return allClients;
     }
   });
 
   // Mutação para adicionar um novo cliente
   const addClientMutation = useMutation({
     mutationFn: async (newClient: Omit<Cliente, 'id'>) => {
-      try {
-        // Adicionar data de cadastro se não existir
-        if (!newClient.dataCadastro) {
-          newClient.dataCadastro = new Date();
-        }
-        
-        // Adicionar cliente no banco
-        const id = await db.clientes.add(newClient as Cliente);
-        
-        return { ...newClient, id } as Cliente;
-      } catch (error) {
-        console.error('Erro ao adicionar cliente:', error);
-        throw error;
-      }
+      if (!newClient.dataCadastro) newClient.dataCadastro = new Date();
+      const created = await createClientSmart(newClient);
+      return created;
     },
     // Invalidar cache para recarregar dados
     onSuccess: () => {
@@ -62,23 +43,8 @@ export const useClients = (filter?: string) => {
   // Mutação para atualizar um cliente existente
   const updateClientMutation = useMutation({
     mutationFn: async (updatedClient: Cliente) => {
-      try {
-        // Garantir que cliente tem ID
-        if (!updatedClient.id) {
-          throw new Error('Cliente precisa ter um ID para ser atualizado');
-        }
-        
-        // Adicionar data de atualização
-        updatedClient.ultimaAtualizacao = new Date();
-        
-        // Atualizar no banco
-        await db.clientes.update(updatedClient.id, updatedClient);
-        
-        return updatedClient;
-      } catch (error) {
-        console.error('Erro ao atualizar cliente:', error);
-        throw error;
-      }
+      updatedClient.ultimaAtualizacao = new Date();
+      return await updateClientSmart(updatedClient);
     },
     // Invalidar cache para recarregar dados
     onSuccess: () => {
@@ -88,14 +54,13 @@ export const useClients = (filter?: string) => {
 
   // Mutação para excluir um cliente
   const deleteClientMutation = useMutation({
-    mutationFn: async (clientId: number) => {
-      try {
-        await db.clientes.delete(clientId);
-        return clientId;
-      } catch (error) {
-        console.error('Erro ao excluir cliente:', error);
-        throw error;
+    mutationFn: async (clientRef: number | string | Cliente) => {
+      let ref: number | string = clientRef as any;
+      if (typeof clientRef === 'object' && clientRef !== null) {
+        ref = clientRef.email || (clientRef as any).id;
       }
+      await deleteClientSmart(ref);
+      return ref;
     },
     // Invalidar cache para recarregar dados
     onSuccess: () => {

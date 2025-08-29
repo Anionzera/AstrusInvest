@@ -21,6 +21,7 @@ import { useNavigate } from "react-router-dom";
 import ReportCustomization from "./ReportCustomization";
 import ReportPreview from "./ReportPreview";
 import { db } from "@/lib/db";
+import { recommendationsApi } from "@/services/recommendationsService";
 import { calculateAssetAllocation } from "@/lib/investmentUtils";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { exportRecommendationToPDF } from "@/lib/pdfExport";
@@ -59,10 +60,8 @@ const ReportGenerator: React.FC<ReportGeneratorProps> = ({
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("customize");
   const [isGenerating, setIsGenerating] = useState(false);
-  const [recommendations, setRecommendations] = useState([]);
-  const [selectedRecommendationId, setSelectedRecommendationId] = useState<
-    number | null
-  >(null);
+  const [recommendations, setRecommendations] = useState<any[]>([]);
+  const [selectedRecommendationId, setSelectedRecommendationId] = useState<string | null>(null);
   const [reportData, setReportData] = useState({
     title: "Relatório de Alocação de Portfólio de Investimentos",
     description:
@@ -83,19 +82,19 @@ const ReportGenerator: React.FC<ReportGeneratorProps> = ({
   // Adicionar um estado para armazenar a alocação original extraída da recomendação
   const [originalAllocation, setOriginalAllocation] = useState([]);
 
-  // Carregar recomendações do banco de dados
+  // Carregar recomendações diretamente do servidor (ignorar cache local)
   useEffect(() => {
     const loadRecommendations = async () => {
       try {
-        const recomendacoes = await db.recomendacoes.toArray();
-        setRecommendations(recomendacoes);
+        const remote = await recommendationsApi.list();
+        setRecommendations(remote || []);
       } catch (error) {
         console.error("Erro ao carregar recomendações:", error);
         toast({
           variant: "destructive",
           title: "Erro ao carregar recomendações",
           description:
-            "Não foi possível carregar as recomendações do banco de dados.",
+            "Não foi possível carregar as recomendações do servidor.",
         });
       }
     };
@@ -108,9 +107,8 @@ const ReportGenerator: React.FC<ReportGeneratorProps> = ({
     if (selectedRecommendationId) {
       const loadRecommendationData = async () => {
         try {
-          const recomendacao = await db.recomendacoes.get(
-            selectedRecommendationId,
-          );
+          const list = await recommendationsApi.list();
+          const recomendacao = list.find(r => r.id === selectedRecommendationId);
           if (recomendacao) {
             // Extrair alocação de ativos da recomendação, considerando diferentes estruturas
             let calculatedAssets = [];
@@ -120,9 +118,9 @@ const ReportGenerator: React.FC<ReportGeneratorProps> = ({
               // Verificar todas as possíveis fontes de dados de alocação
               let allocationData = null;
               
-              // 1. Verificar em alocacaoAtivos array (formato comum em recomendações avançadas)
-              if (Array.isArray(recomendacao.alocacaoAtivos) && recomendacao.alocacaoAtivos.length > 0) {
-                allocationData = recomendacao.alocacaoAtivos.map((item) => ({
+              // 1. Verificar em alocacaoAtivos array (formato comum em recomendações avançadas locais)
+              if (Array.isArray((recomendacao as any).alocacaoAtivos) && (recomendacao as any).alocacaoAtivos.length > 0) {
+                allocationData = (recomendacao as any).alocacaoAtivos.map((item: any) => ({
                   nome: item.name || item.nome || '',
                   percentual: item.allocation || item.percentual || 0,
                   cor: item.color || '#0088FE',
@@ -131,8 +129,8 @@ const ReportGenerator: React.FC<ReportGeneratorProps> = ({
                 }));
               }
               // 2. Verificar no objeto allocation (formato chave-valor)
-              else if (recomendacao.allocation && typeof recomendacao.allocation === 'object' && !Array.isArray(recomendacao.allocation)) {
-                allocationData = Object.entries(recomendacao.allocation).map(([key, value]) => ({
+              else if ((recomendacao as any).allocation && typeof (recomendacao as any).allocation === 'object' && !Array.isArray((recomendacao as any).allocation)) {
+                allocationData = Object.entries((recomendacao as any).allocation).map(([key, value]) => ({
                   nome: key,
                   percentual: typeof value === 'number' ? value : 0,
                   cor: getAssetColor(key),
@@ -141,8 +139,8 @@ const ReportGenerator: React.FC<ReportGeneratorProps> = ({
                 }));
               }
               // 3. Verificar em conteudo.alocacao array
-              else if (Array.isArray(recomendacao.conteudo?.alocacao) && recomendacao.conteudo.alocacao.length > 0) {
-                allocationData = recomendacao.conteudo.alocacao.map((item) => ({
+              else if (Array.isArray((recomendacao as any).content?.alocacao) && (recomendacao as any).content.alocacao.length > 0) {
+                allocationData = (recomendacao as any).content.alocacao.map((item: any) => ({
                   nome: item.name || item.nome || '',
                   percentual: item.allocation || item.percentual || item.peso || item.weight || 0,
                   cor: item.color || getAssetColor(item.name || item.nome || ''),
@@ -151,8 +149,8 @@ const ReportGenerator: React.FC<ReportGeneratorProps> = ({
                 }));
               }
               // 4. Verificar em conteudo.alocacaoRecomendada objeto
-              else if (recomendacao.conteudo?.alocacaoRecomendada && typeof recomendacao.conteudo.alocacaoRecomendada === 'object') {
-                allocationData = Object.entries(recomendacao.conteudo.alocacaoRecomendada).map(([key, value]) => ({
+              else if ((recomendacao as any).content?.alocacaoRecomendada && typeof (recomendacao as any).content.alocacaoRecomendada === 'object') {
+                allocationData = Object.entries((recomendacao as any).content.alocacaoRecomendada).map(([key, value]) => ({
                   nome: key,
                   percentual: typeof value === 'number' ? value : 0,
                   cor: getAssetColor(key),
@@ -301,13 +299,13 @@ const ReportGenerator: React.FC<ReportGeneratorProps> = ({
             // Usar os dados extraídos da recomendação para o relatório
             setReportData({
               ...reportData,
-              title: `Relatório de Investimentos - ${recomendacao.nomeCliente || 'Cliente'}`,
-              description: `Alocação de investimentos personalizada para ${recomendacao.nomeCliente || 'Cliente'} com base no perfil de risco ${recomendacao.perfilRisco || 'personalizado'} e horizonte de investimento ${recomendacao.horizonteInvestimento || 'definido'}`,
-              clientName: recomendacao.nomeCliente || 'Cliente',
-              riskProfile: recomendacao.perfilRisco || 'Personalizado',
-              investmentHorizon: recomendacao.horizonteInvestimento || 'Personalizado',
-              allocationStrategy: recomendacao.estrategia || 'Personalizada',
-              marketScenario: recomendacao.marketScenario || "baseline",
+              title: `Relatório de Investimentos - ${((recomendacao as any).content?.clienteData?.name) || 'Cliente'}`,
+              description: `Alocação de investimentos personalizada para ${((recomendacao as any).content?.clienteData?.name) || 'Cliente'} com base no perfil de risco ${(recomendacao as any).risk_profile || (recomendacao as any).content?.perfilRisco?.profile || 'personalizado'} e horizonte de investimento ${(recomendacao as any).investment_horizon || 'definido'}`,
+              clientName: ((recomendacao as any).content?.clienteData?.name) || 'Cliente',
+              riskProfile: (recomendacao as any).risk_profile || (recomendacao as any).content?.perfilRisco?.profile || 'Personalizado',
+              investmentHorizon: (recomendacao as any).investment_horizon || 'Personalizado',
+              allocationStrategy: (recomendacao as any).content?.estrategia?.name || 'Personalizada',
+              marketScenario: (recomendacao as any).content?.marketScenario || "baseline",
               assetAllocation: calculatedAssets.map((asset) => ({
                 name: asset.nome,
                 percentage: asset.percentual,

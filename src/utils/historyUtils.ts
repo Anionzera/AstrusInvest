@@ -3,6 +3,8 @@
  */
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '@/lib/db'; // Importação do cliente de banco de dados
+import { recommendationsApi } from '@/services/recommendationsService';
+import { api } from '@/services/api';
 
 /** 
  * Tipo para a entrada de histórico 
@@ -66,8 +68,9 @@ export const addHistoryEntry = async (entry: Omit<HistoryEntry, 'id' | 'timestam
       timestamp: Date.now()
     };
 
-    // Verificar se temos o banco de dados para salvar
-    if (!db) {
+    // Tentar enviar ao backend
+    const online = await api.health().then(h => h.ok && h.db).catch(() => false);
+    if (!online) {
       console.warn('Banco de dados não disponível. Salvando localmente.');
       
       // Fallback para localStorage
@@ -77,9 +80,18 @@ export const addHistoryEntry = async (entry: Omit<HistoryEntry, 'id' | 'timestam
       
       return completeEntry;
     }
-
-    // Salvar no banco de dados
-    await db.historico.add(completeEntry);
+    try {
+      await fetch('/api/history', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+        client_id: entry.userId || uuidv4(),
+        entity: entry.entityType,
+        entity_id: entry.entityId || uuidv4(),
+        action: entry.action,
+        details: entry.details,
+      }) });
+    } catch {
+      // se falhar, fica no cache local
+      await db.historico.add(completeEntry as any);
+    }
     
     return completeEntry;
   } catch (error) {
@@ -217,7 +229,8 @@ const getLocalRecommendations = (): Recommendation[] => {
 export const getRecommendationHistory = async (): Promise<Recommendation[]> => {
   try {
     // Verificar se temos o banco de dados
-    if (!db) {
+    const online = await api.health().then(h => h.ok && h.db).catch(() => false);
+    if (!online) {
       console.warn('Banco de dados não disponível. Lendo localmente.');
       return getLocalRecommendations();
     }
@@ -229,26 +242,19 @@ export const getRecommendationHistory = async (): Promise<Recommendation[]> => {
     }
     
     // Buscar do banco de dados
-    const dbRecomendacoes = await db.recomendacoes.toArray();
-    
-    // Converter para o formato Recommendation
-    return dbRecomendacoes.map(rec => {
-      return {
+    const remote = await recommendationsApi.list();
+    return remote.map(rec => ({
         id: rec.id,
-        title: rec.titulo,
-        clientId: rec.clienteId,
-        clientName: '', // A ser preenchido posteriormente se necessário
-        date: rec.dataCriacao instanceof Date ? rec.dataCriacao.getTime() : new Date(rec.dataCriacao).getTime(),
+      title: rec.title,
+      clientId: rec.client_id,
+      clientName: (rec as any)?.content?.clienteData?.name || (rec as any)?.content?.clientData?.name || undefined,
+      date: rec.created_at ? new Date(rec.created_at).getTime() : Date.now(),
         status: mapStatusToRecommendation(rec.status),
-        createdAt: rec.dataCriacao instanceof Date ? rec.dataCriacao.getTime() : new Date(rec.dataCriacao).getTime(),
-        updatedAt: rec.dataAtualizacao ? 
-          (rec.dataAtualizacao instanceof Date ? rec.dataAtualizacao.getTime() : new Date(rec.dataAtualizacao).getTime()) 
-          : undefined,
-        description: rec.descricao,
-        // Outros campos podem ser mapeados conforme necessário
-        conteudo: rec.conteudo
-      } as Recommendation;
-    });
+      createdAt: rec.created_at ? new Date(rec.created_at).getTime() : Date.now(),
+      updatedAt: rec.updated_at ? new Date(rec.updated_at).getTime() : undefined,
+      description: rec.description,
+      conteudo: rec.content,
+    } as Recommendation));
   } catch (error) {
     console.error('Erro ao obter histórico de recomendações:', error);
     
@@ -280,7 +286,8 @@ const mapStatusToRecommendation = (status: string): Recommendation['status'] => 
 export const getRecommendationById = async (id: string): Promise<Recommendation | null> => {
   try {
     // Verificar se temos o banco de dados
-    if (!db) {
+    const online = await api.health().then(h => h.ok && h.db).catch(() => false);
+    if (!online) {
       console.warn('Banco de dados não disponível. Lendo localmente.');
       const recommendations = getLocalRecommendations();
       return recommendations.find(r => r.id === id) || null;
@@ -294,33 +301,20 @@ export const getRecommendationById = async (id: string): Promise<Recommendation 
     }
     
     // Buscar do banco de dados
-    const dbRecomendacao = await db.recomendacoes.get(id);
-    
-    if (!dbRecomendacao) {
-      return null;
-    }
-    
-    // Converter para o formato Recommendation
+    const list = await recommendationsApi.list();
+    const rec = list.find(x => x.id === id);
+    if (!rec) return null;
     return {
-      id: dbRecomendacao.id,
-      title: dbRecomendacao.titulo,
-      clientId: dbRecomendacao.clienteId,
-      clientName: '', // A ser preenchido posteriormente se necessário
-      date: dbRecomendacao.dataCriacao instanceof Date ? 
-        dbRecomendacao.dataCriacao.getTime() : 
-        new Date(dbRecomendacao.dataCriacao).getTime(),
-      status: mapStatusToRecommendation(dbRecomendacao.status),
-      createdAt: dbRecomendacao.dataCriacao instanceof Date ? 
-        dbRecomendacao.dataCriacao.getTime() : 
-        new Date(dbRecomendacao.dataCriacao).getTime(),
-      updatedAt: dbRecomendacao.dataAtualizacao ? 
-        (dbRecomendacao.dataAtualizacao instanceof Date ? 
-          dbRecomendacao.dataAtualizacao.getTime() : 
-          new Date(dbRecomendacao.dataAtualizacao).getTime()) 
-        : undefined,
-      description: dbRecomendacao.descricao,
-      // Outros campos podem ser mapeados conforme necessário
-      conteudo: dbRecomendacao.conteudo
+      id: rec.id,
+      title: rec.title,
+      clientId: rec.client_id,
+      clientName: (rec as any)?.content?.clienteData?.name || (rec as any)?.content?.clientData?.name || undefined,
+      date: rec.created_at ? new Date(rec.created_at).getTime() : Date.now(),
+      status: mapStatusToRecommendation(rec.status),
+      createdAt: rec.created_at ? new Date(rec.created_at).getTime() : Date.now(),
+      updatedAt: rec.updated_at ? new Date(rec.updated_at).getTime() : undefined,
+      description: rec.description,
+      conteudo: rec.content,
     } as Recommendation;
   } catch (error) {
     console.error(`Erro ao buscar recomendação ${id}:`, error);
@@ -379,8 +373,8 @@ export const deleteRecommendationById = async (
   userName?: string
 ): Promise<boolean> => {
   try {
-    // Verificar se temos o banco de dados
-    if (!db) {
+    const online = await api.health().then(h => h.ok && h.db).catch(() => false);
+    if (!online) {
       console.warn('Banco de dados não disponível. Excluindo localmente.');
       
       // Fallback para localStorage
@@ -389,8 +383,7 @@ export const deleteRecommendationById = async (
       
       localStorage.setItem('recommendations', JSON.stringify(filteredRecommendations));
     } else {
-      // Excluir do banco de dados
-      await db.recomendacoes.delete(id);
+      await recommendationsApi.delete(id);
     }
     
     // Registrar entrada no histórico
@@ -419,8 +412,8 @@ export const getHistoryForEntity = async (
   entityType: string
 ): Promise<HistoryEntry[]> => {
   try {
-    // Verificar se temos o banco de dados
-    if (!db) {
+    const online = await api.health().then(h => h.ok && h.db).catch(() => false);
+    if (!online) {
       console.warn('Banco de dados não disponível. Lendo localmente.');
       
       const historyEntries = getLocalHistoryEntries();
@@ -429,35 +422,11 @@ export const getHistoryForEntity = async (
       );
     }
     
-    // Verificar se a tabela historico existe
-    if (!db.historico) {
-      console.warn('Tabela historico não disponível. Lendo localmente.');
+    // Sem endpoint dedicado de history por entidade ainda → fallback local
       const historyEntries = getLocalHistoryEntries();
       return historyEntries.filter(
         entry => entry.entityId === entityId && entry.entityType === entityType
       );
-    }
-    
-    // Buscar do banco de dados
-    const dbHistoricoItems = await db.historico
-      .where('entityId')
-      .equals(entityId)
-      .and(item => item.entityType === entityType)
-      .toArray();
-      
-    // Converter para o formato HistoryEntry
-    return dbHistoricoItems.map(item => {
-      return {
-        id: item.id,
-        timestamp: item.timestamp instanceof Date ? item.timestamp.getTime() : new Date(item.timestamp).getTime(),
-        userId: item.userId || 'system',
-        userName: item.userName || 'Sistema',
-        action: item.action,
-        details: item.metadata,
-        entityId: item.entityId,
-        entityType: item.entityType
-      } as HistoryEntry;
-    });
   } catch (error) {
     console.error(`Erro ao buscar histórico para ${entityType} ${entityId}:`, error);
     

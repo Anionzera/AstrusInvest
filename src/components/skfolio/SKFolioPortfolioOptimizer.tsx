@@ -94,7 +94,7 @@ interface PortfolioResult {
 
 const AIPortfolioOptimizer: React.FC = () => {
   // Estados principais
-  const [selectedSymbols, setSelectedSymbols] = useState<string[]>(['PETR4.SA', 'VALE3.SA', 'ITUB4.SA']);
+  const [selectedSymbols, setSelectedSymbols] = useState<string[]>(['PETR4.SA', 'AAPL', 'BTC-USD']);
   const [newSymbol, setNewSymbol] = useState<string>('');
   const [period, setPeriod] = useState<string>('2y');
   const [optimizationType, setOptimizationType] = useState<string>('mean_risk');
@@ -184,7 +184,7 @@ const AIPortfolioOptimizer: React.FC = () => {
 
     setIsOptimizing(true);
     try {
-      const response = await fetch('/api/skfolio/brazilian-stocks/optimize', {
+      const response = await fetch('/api/skfolio/global-portfolio/optimize', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -366,14 +366,14 @@ const AIPortfolioOptimizer: React.FC = () => {
                   Adicionar Ativos
                 </CardTitle>
                 <CardDescription className="text-violet-700">
-                  Digite qualquer ticker: PETR4.SA, AAPL, TSLA, BTC-USD
+                  Digite qualquer ticker global: PETR4.SA, AAPL, TSLA, BTC-USD
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 {/* Input para novo símbolo */}
                 <div className="flex gap-2">
                   <Input
-                    placeholder="Ex: PETR4.SA, AAPL, TSLA..."
+                    placeholder="Ex: PETR4.SA, AAPL, BTC-USD..."
                     value={newSymbol}
                     onChange={(e) => setNewSymbol(e.target.value)}
                     onKeyPress={(e) => e.key === 'Enter' && addSymbol()}
@@ -416,7 +416,7 @@ const AIPortfolioOptimizer: React.FC = () => {
                 <Alert className="border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50">
                   <Info className="h-4 w-4 text-blue-600" />
                   <AlertDescription className="text-blue-800">
-                    <strong>Dica:</strong> Use .SA para ações brasileiras (PETR4.SA), 
+                    <strong>Dica:</strong> Use .SA para ações brasileiras, -USD para criptomoedas 
                     -USD para crypto (BTC-USD) ou ticker direto para ações americanas (AAPL).
                   </AlertDescription>
                 </Alert>

@@ -11,8 +11,7 @@ import {
   isTokenValid,
   updateUserActivity,
   hasPermission as checkPermission,
-  registerUser,
-  checkUserExists
+  apiRegister
 } from '@/lib/authService';
 
 // Interface para o contexto de autenticação
@@ -258,18 +257,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         return false;
       }
       
-      // Verificar se o nome de usuário já existe
-      if (checkUserExists(data.username)) {
-        console.error("Nome de usuário já existe:", data.username);
-        setIsLoading(false);
-        return false;
-      }
-      
-      // Registrar o novo usuário
-      const registrationSuccess = registerUser(data);
-      
-      if (!registrationSuccess) {
-        console.error("Falha ao registrar usuário");
+      // Registrar o novo usuário via API
+      const reg = await apiRegister({
+        username: data.username,
+        password: data.password,
+        name: data.name,
+        email: data.email,
+        role: data.role || 'user',
+      });
+      if (!reg?.success) {
+        console.error("Falha ao registrar usuário:", reg?.error);
         setIsLoading(false);
         return false;
       }

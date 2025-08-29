@@ -71,20 +71,39 @@ const ClientManager = () => {
   });
   const navigate = useNavigate();
 
+  // Helper: localizar cliente por id local (numérico), serverId (UUID) ou email
+  const findClientByParam = useCallback((param: string) => {
+    const p = (param || '').toLowerCase();
+    // serverId (uuid)
+    const byServerId = clientes.find((c: any) => (c as any).serverId && String((c as any).serverId).toLowerCase() === p);
+    if (byServerId) return byServerId;
+    // id numérico/local (Dexie) ou string
+    if (/^\d+$/.test(param)) {
+      const byNumeric = clientes.find((c: any) => String((c as any).id) === param);
+      if (byNumeric) return byNumeric;
+    }
+    // id como string
+    const byIdString = clientes.find((c: any) => String((c as any).id) === param);
+    if (byIdString) return byIdString;
+    // fallback por email
+    return clientes.find(c => (c.email || '').toLowerCase() === p);
+  }, [clientes]);
+
   // Efeito para definir o cliente selecionado quando o ID da URL muda
   useEffect(() => {
     if (clientIdFromUrl && clientes.length > 0) {
-      setSelectedClientId(clientIdFromUrl);
-      const clienteFromUrl = clientes.find(c => c.id === clientIdFromUrl);
-      if (!clienteFromUrl) {
+      const c = findClientByParam(clientIdFromUrl);
+      if (c) {
+        setSelectedClientId(clientIdFromUrl);
+        setError(null);
+      } else {
+        // evitar banner permanente; apenas limpar seleção e ir para listagem
+        setSelectedClientId(null);
         setError(`Cliente com ID ${clientIdFromUrl} não encontrado.`);
-        // Opcional: redirecionar para a listagem após um tempo
-        setTimeout(() => {
-          navigate('/clients');
-        }, 3000);
+        setTimeout(() => navigate('/clients', { replace: true }), 1500);
       }
     }
-  }, [clientIdFromUrl, clientes, navigate]);
+  }, [clientIdFromUrl, clientes, navigate, findClientByParam]);
 
   const filteredClientes = useMemo(() => {
     if (!searchTerm.trim()) return clientes;
@@ -176,15 +195,17 @@ const ClientManager = () => {
           title: "Cliente atualizado com sucesso!"
         });
       } else {
-        const newCliente = { ...cliente, id: uuidv4(), dataCadastro: new Date() };
-        savedCliente = await addCliente(newCliente);
+        const newClienteNoId: any = { ...cliente };
+        delete newClienteNoId.id;
+        newClienteNoId.dataCadastro = new Date();
+        savedCliente = await addCliente(newClienteNoId);
         await addHistoryEntry({
           entityType: 'cliente',
-          entityId: newCliente.id,
-          entityName: newCliente.nome,
+          entityId: savedCliente?.id as any,
+          entityName: newClienteNoId.nome,
           action: 'create',
-          details: `Novo cliente ${newCliente.nome} foi cadastrado`,
-          metadata: { clienteId: newCliente.id }
+          details: `Novo cliente ${newClienteNoId.nome} foi cadastrado`,
+          metadata: { clienteId: (savedCliente as any)?.id }
         });
         toast({
           title: "Cliente adicionado com sucesso!"
@@ -202,13 +223,13 @@ const ClientManager = () => {
   };
 
   const handleDeleteCliente = async (id: string) => {
-    const clienteToDelete = clientes.find(c => c.id === id);
+    const clienteToDelete = clientes.find(c => String((c as any).id) === String(id) || (c as any).serverId === id);
     if (!clienteToDelete) return;
     
     const confirmed = window.confirm(`Tem certeza que deseja excluir o cliente ${clienteToDelete.nome}?`);
     if (confirmed) {
       try {
-        await deleteCliente(id);
+        await deleteCliente(clienteToDelete as any);
         await addHistoryEntry({
           entityType: 'cliente',
           entityId: id,
@@ -251,11 +272,10 @@ const ClientManager = () => {
 
   // Função para visualizar o dashboard do cliente
   const viewClientDashboard = (cliente: Cliente) => {
-    if (cliente.id) {
-      setSelectedClientId(cliente.id);
-      // Atualizar URL sem recarregar a página
-      navigate(`/clients/${cliente.id}`, { replace: true });
-    }
+    const idToUse = ((cliente as any).serverId) || String((cliente as any).id || '');
+    if (!idToUse) return;
+    setSelectedClientId(idToUse);
+    navigate(`/clients/${idToUse}`, { replace: true });
   };
 
   // Voltar para a listagem de clientes

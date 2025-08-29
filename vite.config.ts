@@ -29,18 +29,31 @@ export default defineConfig({
     },
   },
   server: {
+    host: '0.0.0.0', // Permite acesso de qualquer IP da rede
+    port: 5173,
     // @ts-ignore
     allowedHosts: true,
     proxy: {
       // Proxy para API Python que utiliza yfinance
       '/api/market-data': {
-        target: 'http://localhost:5000',
+        target: 'http://0.0.0.0:5000',
         changeOrigin: true,
-        secure: false
+        secure: false,
+        configure: (proxy, options) => {
+          proxy.on('error', (err, req, res) => {
+            console.error('Erro de proxy para market-data:', err);
+          });
+          proxy.on('proxyReq', (proxyReq, req, res) => {
+            console.log('Enviando requisição market-data:', req.url);
+          });
+          proxy.on('proxyRes', (proxyRes, req, res) => {
+            console.log('Recebendo resposta market-data:', proxyRes.statusCode, req.url);
+          });
+        }
       },
       // Proxy para API Binance
       '/api/binance': {
-        target: 'http://localhost:5000',
+        target: 'http://0.0.0.0:5000',
         changeOrigin: true,
         secure: false,
         configure: (proxy, options) => {
@@ -57,7 +70,7 @@ export default defineConfig({
       },
       // Proxy para API de otimização de portfólio
       '/api/portfolio': {
-        target: 'http://localhost:5000',
+        target: 'http://0.0.0.0:5000',
         changeOrigin: true,
         secure: false,
         configure: (proxy, options) => {
@@ -74,7 +87,7 @@ export default defineConfig({
       },
       // Proxy para API de análise de performance
       '/api/performance': {
-        target: 'http://localhost:5000',
+        target: 'http://0.0.0.0:5000',
         changeOrigin: true,
         secure: false,
         configure: (proxy, options) => {
@@ -91,7 +104,7 @@ export default defineConfig({
       },
       // Proxy geral para todas as outras rotas da API
       '/api': {
-        target: 'http://localhost:5000',
+        target: 'http://0.0.0.0:5000',
         changeOrigin: true,
         secure: false,
         configure: (proxy, options) => {

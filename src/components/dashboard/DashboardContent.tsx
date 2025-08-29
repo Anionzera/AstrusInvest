@@ -48,6 +48,12 @@ import ClientRecommendationStats from "./ClientRecommendationStats";
 import PerformanceMetrics from "./PerformanceMetrics";
 import ClientAnalytics from "../client/ClientAnalytics";
 import { db, inicializarDB } from "@/lib/db";
+import { api } from "@/services/api";
+import { recommendationsApi } from "@/services/recommendationsService";
+import { clientsApi } from "@/services/clientsService";
+import { portfoliosApi } from "@/services/portfoliosService";
+import { positionsApi } from "@/services/positionsService";
+import { MarketDataService } from "@/lib/marketDataService";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import {
@@ -115,6 +121,124 @@ const DashboardContent = ({
   const carregarEstatisticas = async () => {
     setIsLoading(true);
     try {
+      const online = await api.health().then(h => h.ok && h.db).catch(() => false);
+
+      if (online) {
+        // Buscar dados reais do Postgres
+        const [recs, _clients, _portfolios, _positions] = await Promise.all([
+          recommendationsApi.list(),
+          clientsApi.list().catch(() => []),
+          portfoliosApi.list().catch(() => []),
+          positionsApi.list().catch(() => []),
+        ]);
+
+        const totalRecomendacoes = recs.length;
+
+        const estrategiasUnicas = new Set<string>();
+        const estrategiaCounts: Record<string, number> = {};
+        let valorTotalInvestido = 0;
+
+        recs.forEach(r => {
+          const strategy = (r as any)?.content?.strategy?.name || (r as any)?.content?.strategyName || (r as any)?.content?.estrategia || r.title || "Estratégia";
+          estrategiasUnicas.add(strategy);
+          estrategiaCounts[strategy] = (estrategiaCounts[strategy] || 0) + 1;
+          if (typeof r.investment_amount === 'number') valorTotalInvestido += r.investment_amount as number;
+        });
+
+        const valorMedioPorRecomendacao = totalRecomendacoes > 0 ? valorTotalInvestido / totalRecomendacoes : 0;
+
+        // Distribuição por perfil de risco
+        const perfilCounts: Record<string, number> = {};
+        recs.forEach((r) => {
+          const key = (r.risk_profile || 'N/D');
+          perfilCounts[key] = (perfilCounts[key] || 0) + 1;
+        });
+        const perfilDistribution = Object.entries(perfilCounts).map(([name, value]) => ({ name, value }));
+
+        // Distribuição por estratégia
+        const estrategiaDistribution = Object.entries(estrategiaCounts)
+          .map(([name, value]) => ({ name, value }))
+          .sort((a, b) => b.value - a.value);
+
+        // ====== Agregado de portfólios (valor de mercado) ======
+        const normalizeTicker = (input?: string) => {
+          const v = (input || "").trim().toUpperCase();
+          if (!v) return v;
+          if (v.includes(".")) return v;
+          if (/^[A-Z]{4}[0-9]{1,2}$/.test(v)) return `${v}.SA`;
+          return v;
+        };
+
+        const uniqueSymbols = Array.from(new Set(_positions.map(p => normalizeTicker(p.symbol)))).filter(Boolean) as string[];
+        const quotesMap = new Map<string, number>();
+        try {
+          await Promise.all(uniqueSymbols.map(async (s) => {
+            try {
+              const q = await MarketDataService.getQuote(s);
+              const price = Number(q?.currentPrice || 0);
+              if (price > 0) quotesMap.set(s.toUpperCase(), price);
+            } catch {}
+          }));
+        } catch {}
+
+        const totals = _positions.reduce((acc, p) => {
+          const sym = normalizeTicker(p.symbol);
+          const isBR = (sym || '').toUpperCase().endsWith('.SA');
+          const price = quotesMap.get((sym || '').toUpperCase()) ?? Number(p.avg_price || 0);
+          const mv = Number(p.quantity || 0) * price;
+          if (isBR) acc.brl += mv; else acc.usd += mv;
+          return acc;
+        }, { brl: 0, usd: 0 } as { brl: number; usd: number });
+
+        let fxRate = 0;
+        try {
+          const q = await MarketDataService.getQuote('BRL=X');
+          fxRate = Number(q?.currentPrice || 0);
+        } catch {}
+        if (!fxRate || !isFinite(fxRate)) fxRate = 5.0; // fallback
+        const valorTotalInvestidoBRL = totals.brl + totals.usd * fxRate;
+
+        // Crescimento mensal e séries por mês (últimos 6 meses)
+        const meses = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+        const recomendacoesPorMes: { month: string; count: number }[] = [];
+        const valorInvestidoPorMes: { month: string; value: number }[] = [];
+        for (let i = 5; i >= 0; i--) {
+          const ref = new Date();
+          ref.setMonth(ref.getMonth() - i);
+          const mes = ref.getMonth();
+          const ano = ref.getFullYear();
+          const filtradas = recs.filter(r => {
+            const d = r.created_at ? new Date(r.created_at) : null;
+            return !!d && d.getMonth() === mes && d.getFullYear() === ano;
+          });
+          const somaMes = filtradas.reduce((s, r) => s + (typeof r.investment_amount === 'number' ? (r.investment_amount as number) : 0), 0);
+          recomendacoesPorMes.push({ month: meses[mes], count: filtradas.length });
+          valorInvestidoPorMes.push({ month: meses[mes], value: somaMes });
+        }
+        const ultimoMes = recomendacoesPorMes[recomendacoesPorMes.length - 1]?.count || 0;
+        const anteriores = Math.max(1, totalRecomendacoes - ultimoMes);
+        const crescimentoMensal = anteriores > 0 ? (ultimoMes / anteriores) * 100 : 0;
+
+        setStats({
+          totalRecomendacoes,
+          estrategiasAtivas: estrategiasUnicas.size,
+          crescimentoMensal: parseFloat(crescimentoMensal.toFixed(1)),
+          valorTotalInvestido: valorTotalInvestidoBRL,
+          valorMedioPorRecomendacao,
+          perfilDistribution,
+          estrategiaDistribution,
+          recomendacoesPorMes,
+          valorInvestidoPorMes,
+          recentRecommendations: recs
+            .slice()
+            .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
+            .slice(0, 5),
+        });
+
+        return;
+      }
+
+      // Fallback offline: Dexie (comportamento anterior)
       const totalRecomendacoes = await db.recomendacoes.count();
 
       // Busca todas as recomendações
@@ -499,7 +623,7 @@ const DashboardContent = ({
                 {formatCurrency(stats.valorTotalInvestido)}
               </motion.div>
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                Soma de todas as recomendações
+                Soma de todos os portfólios
               </p>
             </CardContent>
           </Card>
